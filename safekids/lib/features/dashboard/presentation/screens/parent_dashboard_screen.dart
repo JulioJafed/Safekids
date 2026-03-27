@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../child_profile/presentation/screens/profiles_screen.dart';
 import '../../../screen_time/presentation/screens/screen_time_screen.dart';
 import '../../../app_control/presentation/screens/app_control_screen.dart';
+import '../../../reports/presentation/screens/reports_screen.dart';
+
+
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
 
@@ -16,10 +19,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     const ProfilesScreen(),
     const ScreenTimeScreen(),
     const AppControlScreen(), 
-    const _ComingSoon(icon: Icons.access_time_rounded, label: 'Control de tiempo'),
-    const _ComingSoon(icon: Icons.apps_rounded, label: 'Bloqueo de apps'),
     const _ComingSoon(icon: Icons.location_on_rounded, label: 'Ubicación'),
-    const _ComingSoon(icon: Icons.bar_chart_rounded, label: 'Reportes'),
+    const ReportsScreen(),
+    
   ];
 
   @override

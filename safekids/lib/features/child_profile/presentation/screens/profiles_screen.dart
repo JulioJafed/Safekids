@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'link_device_screen.dart';
 
 // Modelo simple de perfil de hijo (sin base de datos por ahora)
 class ChildProfile {
@@ -489,11 +490,15 @@ class _ProfileCard extends StatelessWidget {
           // Acciones
           Column(
             children: [
-              IconButton(
-                icon: const Icon(Icons.settings_rounded,
-                    color: Color(0xFF7B9FFF), size: 22),
-                onPressed: () {},
+            IconButton(
+              icon: const Icon(Icons.link_rounded,
+                  color: Color(0xFF7B9FFF), size: 22),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LinkDeviceScreen()),
               ),
+            ),
+              
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded,
                     color: Color(0xFFFF6B6B), size: 22),
@@ -505,6 +510,101 @@ class _ProfileCard extends StatelessWidget {
       ),
     );
   }
+ 
+  void _showLockDialog(BuildContext context) {
+  bool isLocked = false;
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: isLocked
+                    ? const Color(0xFFFF6B6B).withOpacity(0.12)
+                    : const Color(0xFF6ECFB5).withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                color: isLocked
+                    ? const Color(0xFFFF6B6B)
+                    : const Color(0xFF6ECFB5),
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isLocked
+                  ? '${profile.name} no puede usar el celular'
+                  : '¿Bloquear celular de ${profile.name}?',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2D3A6B),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isLocked
+                  ? 'El dispositivo está completamente bloqueado. Solo vos podés desbloquearlo.'
+                  : 'El celular quedará completamente bloqueado hasta que vos lo desbloquees.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF8A94B2), height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFE8ECF8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Cancelar',
+                        style: TextStyle(color: Color(0xFF8A94B2))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => setState(() => isLocked = !isLocked),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isLocked
+                          ? const Color(0xFF6ECFB5)
+                          : const Color(0xFFFF6B6B),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      isLocked ? 'Desbloquear' : 'Bloquear',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 }
 
 class _EmptyState extends StatelessWidget {

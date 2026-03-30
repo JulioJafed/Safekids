@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
 
+import 'package:go_router/go_router.dart';
+
 class ChildHomeScreen extends StatefulWidget {
   const ChildHomeScreen({super.key});
 
@@ -19,6 +21,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
   // Tiempo restante simulado (a futuro vendrá de Firebase)
   int _remainingMinutes = 87;
   int _limitMinutes = 120;
+    final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
 
   @override
   void initState() {
@@ -38,6 +41,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
     _pulseController.dispose();
     super.dispose();
   }
+  
 
   void _generateCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -62,10 +66,238 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
     return const Color(0xFFFF6B6B);
   }
 
+void _showChildLogoutDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('¿Cerrar sesión?',
+          style: TextStyle(
+              color: Color(0xFF2D3A6B), fontWeight: FontWeight.w600)),
+      content: const Text(
+        'Si cerrás sesión, tu padre/madre será notificado. ¿Estás seguro?',
+        style: TextStyle(
+            color: Color(0xFF8A94B2), fontSize: 13, height: 1.5),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar',
+              style: TextStyle(color: Color(0xFF8A94B2))),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            context.go('/login');
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFF6B6B),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Cerrar sesión'),
+        ),
+      ],
+    ),
+  );
+}
+  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+  key: _scaffoldKey,
+  backgroundColor: const Color(0xFFF0F4FF),
+
+  appBar: AppBar(
+    backgroundColor: Colors.white,
+    elevation: 0,
+    leading: IconButton(
+      icon: const Icon(Icons.menu_rounded, color: Color(0xFF2D3A6B)),
+      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+    ),
+    title: Row(
+      children: const [
+        Icon(Icons.shield_rounded, color: Color(0xFF6ECFB5), size: 22),
+        SizedBox(width: 8),
+        Text('SafeKids',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2D3A6B))),
+      ],
+    ),
+  ),
+
+  drawer: Drawer(
+    backgroundColor: Colors.white,
+    child: SafeArea(
+      child: Column(
+        children: [
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            color: const Color(0xFFF0F4FF),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6ECFB5),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.child_care_rounded,
+                          color: Colors.white, size: 30),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Color(0xFF8A94B2)),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text('Mi cuenta',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2D3A6B))),
+                const SizedBox(height: 2),
+                const Text('hijo@email.com',
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF8A94B2))),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6ECFB5).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _isLinked ? '🔗 Vinculado con papá/mamá' : '⚠️ Sin vincular',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _isLinked
+                          ? const Color(0xFF3A9E87)
+                          : const Color(0xFFFFB347),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Opciones limitadas para el hijo
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6ECFB5).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(Icons.timer_rounded,
+                        color: Color(0xFF6ECFB5), size: 20),
+                  ),
+                  title: const Text('Mi tiempo',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF2D3A6B))),
+                  subtitle: const Text('Ver tiempo restante',
+                      style: TextStyle(
+                          fontSize: 11, color: Color(0xFF8A94B2))),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: Color(0xFFB0BAD3), size: 18),
+                  onTap: () => Navigator.pop(context),
+                ),
+
+                // Opciones bloqueadas
+                _LockedItem(label: 'Configuración', subtitle: 'Solo el padre puede modificar'),
+                _LockedItem(label: 'Desbloquear apps', subtitle: 'Requiere autorización del padre'),
+                _LockedItem(label: 'Cambiar límites', subtitle: 'Requiere autorización del padre'),
+
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(color: Color(0xFFE8ECF8)),
+                ),
+
+                // Minimizar
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8A94B2).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(Icons.minimize_rounded,
+                        color: Color(0xFF8A94B2), size: 20),
+                  ),
+                  title: const Text('Minimizar app',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF2D3A6B))),
+                  subtitle: const Text('Volver al inicio del cel',
+                      style: TextStyle(
+                          fontSize: 11, color: Color(0xFF8A94B2))),
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+
+          // Cerrar sesión al fondo
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showChildLogoutDialog(context);
+                },
+                icon: const Icon(Icons.logout_rounded,
+                    color: Color(0xFFFF6B6B), size: 18),
+                label: const Text('Cerrar sesión',
+                    style: TextStyle(
+                        color: Color(0xFFFF6B6B),
+                        fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(
+                      color: Color(0xFFFF6B6B), width: 1.5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),  
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
@@ -414,6 +646,8 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
   }
 }
 
+
+
 class _InfoChip extends StatelessWidget {
   final String label;
   final String value;
@@ -442,6 +676,39 @@ class _InfoChip extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 10, color: Color(0xFF8A94B2))),
       ],
+    );
+  }
+}
+
+class _LockedItem extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  const _LockedItem({required this.label, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF6B6B).withOpacity(0.08),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: const Icon(Icons.lock_rounded,
+            color: Color(0xFFFFB0B0), size: 18),
+      ),
+      title: Text(label,
+          style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFFB0BAD3))),
+      subtitle: Text(subtitle,
+          style: const TextStyle(fontSize: 11, color: Color(0xFFB0BAD3))),
+      trailing: const Icon(Icons.block_rounded,
+          color: Color(0xFFFFB0B0), size: 16),
+      onTap: null,
     );
   }
 }

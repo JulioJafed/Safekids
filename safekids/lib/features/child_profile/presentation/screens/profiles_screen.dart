@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'link_device_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/link_provider.dart';
+
 
 // Modelo simple de perfil de hijo (sin base de datos por ahora)
 class ChildProfile {
@@ -20,369 +23,101 @@ class ChildProfile {
   });
 }
 
-class ProfilesScreen extends StatefulWidget {
+class ProfilesScreen extends ConsumerStatefulWidget {
   const ProfilesScreen({super.key});
 
   @override
-  State<ProfilesScreen> createState() => _ProfilesScreenState();
+  ConsumerState<ProfilesScreen> createState() => _ProfilesScreenState();
 }
 
-class _ProfilesScreenState extends State<ProfilesScreen> {
+class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
   // Lista en memoria (a futuro vendrá de Firebase)
-  final List<ChildProfile> _profiles = [
-    const ChildProfile(
-      id: '1',
-      name: 'Sofía',
-      age: 10,
-      emoji: '👧',
-      deviceStatus: 'Conectado',
-      color: Color(0xFF7B9FFF),
-    ),
-    const ChildProfile(
-      id: '2',
-      name: 'Mateo',
-      age: 8,
-      emoji: '👦',
-      deviceStatus: 'Desconectado',
-      color: Color(0xFF6ECFB5),
-    ),
-  ];
+  @override
+Widget build(BuildContext context) {
+  final childrenAsync = ref.watch(linkedChildrenProvider);
 
-  void _showAddProfileSheet() {
-    final nameController = TextEditingController();
-    int selectedAge = 8;
-    String selectedEmoji = '👧';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-            top: 24,
-            left: 24,
-            right: 24,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8ECF8),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+  return Scaffold(
+    backgroundColor: const Color(0xFFF0F4FF),
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 28),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text('Mis hijos',
+                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF2D3A6B))),
+                    SizedBox(height: 4),
+                    Text('Dispositivos vinculados',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF8A94B2))),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              const Text(
-                'Agregar hijo/a',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2D3A6B),
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Completá los datos del perfil',
-                style: TextStyle(fontSize: 13, color: Color(0xFF8A94B2)),
-              ),
-              const SizedBox(height: 24),
-
-              // Selector de emoji
-              const Text('Elegí un avatar',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2D3A6B))),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: ['👧', '👦', '🧒', '👶', '🧑'].map((e) {
-                  final isSelected = selectedEmoji == e;
-                  return GestureDetector(
-                    onTap: () => setModalState(() => selectedEmoji = e),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFF7B9FFF).withOpacity(0.15)
-                            : const Color(0xFFF5F7FF),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isSelected
-                              ? const Color(0xFF7B9FFF)
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(e, style: const TextStyle(fontSize: 26)),
-                      ),
+                GestureDetector(
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const LinkDeviceScreen())),
+                  child: Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7B9FFF),
+                      borderRadius: BorderRadius.circular(13),
+                      boxShadow: [BoxShadow(color: const Color(0xFF7B9FFF).withOpacity(0.35), blurRadius: 12, offset: const Offset(0, 4))],
                     ),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Nombre
-              const Text('Nombre',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2D3A6B))),
-              const SizedBox(height: 8),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  hintText: 'Nombre del hijo/a',
-                  hintStyle: const TextStyle(color: Color(0xFFBFC8E2)),
-                  prefixIcon: const Icon(Icons.badge_outlined,
-                      color: Color(0xFF7B9FFF), size: 20),
-                  filled: true,
-                  fillColor: const Color(0xFFF5F7FF),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+                    child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(
-                        color: Color(0xFF7B9FFF), width: 1.5),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 16),
                 ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Edad
-              const Text('Edad',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2D3A6B))),
-              const SizedBox(height: 10),
-              Row(
-                children: List.generate(10, (i) {
-                  final age = i + 4;
-                  final isSelected = selectedAge == age;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setModalState(() => selectedAge = age),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFF7B9FFF)
-                              : const Color(0xFFF5F7FF),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$age',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : const Color(0xFF8A94B2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-
-              const SizedBox(height: 28),
-
-              // Botón agregar
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (nameController.text.trim().isNotEmpty) {
+              ],
+            ),
+            const SizedBox(height: 28),
+            Expanded(
+              child: childrenAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF7B9FFF))),
+                error: (e, _) => Center(child: Text('Error: $e')),
+                data: (children) {
+                  if (children.isEmpty) {
+                    return _EmptyState(onAdd: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const LinkDeviceScreen())));
+                  }
+                  return ListView.builder(
+                    itemCount: children.length,
+                    itemBuilder: (context, index) {
+                      final child = children[index];
                       final colors = [
                         const Color(0xFF7B9FFF),
                         const Color(0xFF6ECFB5),
                         const Color(0xFFFFB085),
                         const Color(0xFFFF8FAB),
                       ];
-                      setState(() {
-                        _profiles.add(ChildProfile(
-                          id: DateTime.now().toString(),
-                          name: nameController.text.trim(),
-                          age: selectedAge,
-                          emoji: selectedEmoji,
-                          deviceStatus: 'Sin vincular',
-                          color: colors[_profiles.length % colors.length],
-                        ));
-                      });
-                      Navigator.pop(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7B9FFF),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'Agregar perfil',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteDialog(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Eliminar perfil',
-            style: TextStyle(
-                color: Color(0xFF2D3A6B), fontWeight: FontWeight.w600)),
-        content: Text(
-          '¿Querés eliminar el perfil de ${_profiles[index].name}?',
-          style: const TextStyle(color: Color(0xFF8A94B2)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar',
-                style: TextStyle(color: Color(0xFF8A94B2))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() => _profiles.removeAt(index));
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6B6B),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 28),
-
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Mis hijos',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D3A6B),
+                      return _ProfileCard(
+                        profile: ChildProfile(
+                          id: child['childId'] ?? '',
+                          name: child['name'] ?? 'Hijo/a',
+                          age: child['age'] ?? 0,
+                          emoji: child['emoji'] ?? '👧',
+                          deviceStatus: child['deviceStatus'] ?? 'offline',
+                          color: colors[index % colors.length],
                         ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Administrá los perfiles vinculados',
-                        style: TextStyle(
-                            fontSize: 13, color: Color(0xFF8A94B2)),
-                      ),
-                    ],
-                  ),
-                  // Botón agregar
-                  GestureDetector(
-                    onTap: _showAddProfileSheet,
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7B9FFF),
-                        borderRadius: BorderRadius.circular(13),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF7B9FFF).withOpacity(0.35),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.add_rounded,
-                          color: Colors.white, size: 26),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 28),
-
-              // Lista de perfiles
-              Expanded(
-                child: _profiles.isEmpty
-                    ? _EmptyState(onAdd: _showAddProfileSheet)
-                    : ListView.builder(
-                        itemCount: _profiles.length,
-                        itemBuilder: (context, index) {
-                          final p = _profiles[index];
-                          return _ProfileCard(
-                            profile: p,
-                            onDelete: () => _showDeleteDialog(index),
-                          );
+                        onDelete: () async {
+                          await ref.read(linkRepositoryProvider)
+                              .unlinkChild(child['childId']);
                         },
-                      ),
+                      );
+                    },
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _ProfileCard extends StatelessWidget {

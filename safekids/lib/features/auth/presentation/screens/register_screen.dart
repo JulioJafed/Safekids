@@ -1,19 +1,101 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/auth_provider.dart';
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
+  String _errorMessage = '';
   String? _selectedRole; // 'parent' o 'child'
+
+  Future<void> _register() async {
+    if (_nameController.text.trim().isEmpty ||
+        _emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty ||
+        _selectedRole == null) {
+      setState(() => _errorMessage = 'Completá todos los campos y seleccioná un rol.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    final result = await ref.read(authRepositoryProvider).register(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          role: _selectedRole!,
+        );
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Cuenta creada. Revisá tu email para verificar la cuenta.'),
+        backgroundColor: Color(0xFF4CAF50),
+      ));
+
+      context.go('/login');
+    } else if (result.needsVerification) {
+      _showVerificationDialog();
+    } else {
+      setState(() => _errorMessage = result.errorMessage ?? 'Error al registrarse.');
+    }
+  }
+
+  void _showVerificationDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Verificá tu correo',
+            style: TextStyle(color: Color(0xFF2D3A6B), fontWeight: FontWeight.w600)),
+        content: const Text(
+          'Te enviamos un correo de verificación. Revisá tu bandeja de entrada y hacé clic en el enlace.',
+          style: TextStyle(color: Color(0xFF8A94B2), fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar', style: TextStyle(color: Color(0xFF8A94B2))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await ref.read(authRepositoryProvider).resendVerificationEmail();
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('✓ Correo reenviado'),
+                backgroundColor: Color(0xFF4CAF50),
+              ));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7B9FFF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Reenviar correo'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -110,6 +192,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _RoleBanner(role: _selectedRole!),
               ],
 
+              if (_errorMessage.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6B6B).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFF6B6B).withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: Color(0xFFFF6B6B), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(_errorMessage, style: const TextStyle(fontSize: 12, color: Color(0xFFFF6B6B)))),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 14),
               const SizedBox(height: 28),
 
               // ── FORMULARIO ────────────────────────────────────
@@ -199,15 +302,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: _selectedRole == null
-                            ? null
-                            : () {
-                                if (_selectedRole == 'parent') {
-                                  context.go('/dashboard/parent');
-                                } else {
-                                  context.go('/dashboard/child');
-                                }
-                              },
+                        onPressed: _selectedRole == null || _isLoading ? null : _register,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF7B9FFF),
                           disabledBackgroundColor:
@@ -218,15 +313,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: Text(
-                          _selectedRole == null
-                              ? 'Seleccioná un rol primero'
-                              : 'Crear cuenta como ${_selectedRole == 'parent' ? 'Padre/Madre' : 'Hijo/Hija'}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                              )
+                            : Text(
+                                _selectedRole == null
+                                    ? 'Seleccioná un rol primero'
+                                    : 'Crear cuenta como ${_selectedRole == 'parent' ? 'Padre/Madre' : 'Hijo/Hija'}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
                   ],

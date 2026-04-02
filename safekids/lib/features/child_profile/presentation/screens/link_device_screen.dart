@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../child_profile/presentation/providers/link_provider.dart';
 
-class LinkDeviceScreen extends StatefulWidget {
+
+class LinkDeviceScreen extends ConsumerStatefulWidget {
   const LinkDeviceScreen({super.key});
 
   @override
-  State<LinkDeviceScreen> createState() => _LinkDeviceScreenState();
+  ConsumerState<LinkDeviceScreen> createState() => _LinkDeviceScreenState();
 }
 
-class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
+class _LinkDeviceScreenState extends ConsumerState<LinkDeviceScreen> {
   final List<TextEditingController> _controllers =
       List.generate(8, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(8, (_) => FocusNode());
   bool _isLoading = false;
   bool _isLinked = false;
   String _errorMessage = '';
+  String _linkedChildName = '';
 
   String get _code =>
       _controllers.map((c) => c.text.toUpperCase()).join();
@@ -29,16 +33,31 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   }
 
   Future<void> _verifyCode() async {
-    final raw = _code.replaceAll('-', '');
-    if (raw.length < 8) {
-      setState(() => _errorMessage = 'Ingresá el código completo de 8 caracteres');
-      return;
-    }
-    setState(() { _isLoading = true; _errorMessage = ''; });
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() { _isLoading = false; _isLinked = true; });
+  final parts = _controllers.map((c) => c.text.toUpperCase()).toList();
+  final code = '${parts[0]}${parts[1]}${parts[2]}${parts[3]}-${parts[4]}${parts[5]}${parts[6]}${parts[7]}';
+
+  if (code.replaceAll('-', '').length < 8) {
+    setState(() => _errorMessage = 'Ingresá el código completo de 8 caracteres');
+    return;
   }
 
+  setState(() { _isLoading = true; _errorMessage = ''; });
+
+  final result = await ref.read(linkRepositoryProvider).linkWithCode(code);
+
+  setState(() => _isLoading = false);
+
+  if (!mounted) return;
+
+  if (result.isSuccess) {
+    setState(() {
+      _isLinked = true;
+      _linkedChildName = result.childName;
+    });
+  } else {
+    setState(() => _errorMessage = result.errorMessage ?? 'Error al vincular');
+  }
+}
   @override
   void dispose() {
     for (final c in _controllers) c.dispose();
@@ -267,7 +286,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
               _LinkedInfo(
                   icon: Icons.phone_android_rounded,
                   label: 'Dispositivo',
-                  value: 'Android de Sofía'),
+                  value: _linkedChildName),
               const Divider(height: 20, color: Color(0xFFF0F4FF)),
               _LinkedInfo(
                   icon: Icons.shield_rounded,

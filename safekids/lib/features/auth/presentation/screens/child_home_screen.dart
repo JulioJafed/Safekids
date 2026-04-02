@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../child_profile/presentation/providers/link_provider.dart';
 
-class ChildHomeScreen extends StatefulWidget {
+class ChildHomeScreen extends ConsumerStatefulWidget {
   const ChildHomeScreen({super.key});
 
   @override
-  State<ChildHomeScreen> createState() => _ChildHomeScreenState();
+  ConsumerState<ChildHomeScreen> createState() => _ChildHomeScreenState();
 }
 
-class _ChildHomeScreenState extends State<ChildHomeScreen>
+class _ChildHomeScreenState extends ConsumerState<ChildHomeScreen>
     with TickerProviderStateMixin {
   bool _isLinked = false;
   String _linkCode = '';
@@ -23,6 +23,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
   int _limitMinutes = 120;
     final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
 
+  
   @override
   void initState() {
     super.initState();
@@ -43,13 +44,13 @@ class _ChildHomeScreenState extends State<ChildHomeScreen>
   }
   
 
-  void _generateCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rnd = Random();
-    final code = List.generate(8, (_) => chars[rnd.nextInt(chars.length)]).join();
-    setState(() {
-      _linkCode = '${code.substring(0, 4)}-${code.substring(4)}';
-    });
+  Future<void> _generateCode() async {
+    try {
+      final code = await ref.read(linkRepositoryProvider).generateLinkCode();
+      setState(() => _linkCode = code);
+    } catch (e) {
+      setState(() => _linkCode = 'ERROR');
+    }
   }
 
   double get _progressValue => _remainingMinutes / _limitMinutes;
@@ -613,27 +614,7 @@ void _showChildLogoutDialog(BuildContext context) {
                       ),
 
                       const SizedBox(height: 12),
-
-                      // Botón simular vinculación (temporal sin Firebase)
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: () => setState(() => _isLinked = true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6ECFB5),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                          ),
-                          child: const Text(
-                            'Simular vinculación ✓',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ),
+                      
                     ],
                   ),
                 ),

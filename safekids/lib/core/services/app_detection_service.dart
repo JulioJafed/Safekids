@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 class AppDetectionService {
   static const _channel = MethodChannel('com.safekids/apps');
 
-  // Obtener apps instaladas en el dispositivo
   static Future<List<InstalledApp>> getInstalledApps() async {
     try {
       final List<dynamic> result =
@@ -16,7 +15,6 @@ class AppDetectionService {
     }
   }
 
-  // Obtener estadísticas de uso
   static Future<List<AppUsageStat>> getAppUsageStats() async {
     try {
       final List<dynamic> result =
@@ -25,33 +23,67 @@ class AppDetectionService {
           .map((s) => AppUsageStat.fromMap(Map<String, dynamic>.from(s)))
           .toList();
     } on PlatformException catch (e) {
-      if (e.code == 'NO_PERMISSION') {
-        throw PermissionException();
-      }
+      if (e.code == 'NO_PERMISSION') throw PermissionException();
       throw Exception('Error obteniendo estadísticas: ${e.message}');
     }
   }
 
-  // Verificar si tiene permiso
   static Future<bool> hasUsagePermission() async {
     try {
-      return await _channel.invokeMethod('hasUsagePermission') ?? false;
+      final result = await _channel.invokeMethod('hasUsagePermission');
+      return result == true;
     } on PlatformException {
       return false;
     }
   }
 
-  // Abrir configuración de permisos
   static Future<void> openUsageSettings() async {
     try {
       await _channel.invokeMethod('openUsageSettings');
     } on PlatformException catch (e) {
-      throw Exception('Error abriendo configuración: ${e.message}');
+      throw Exception('Error: ${e.message}');
     }
   }
+  
+  // Agregá estos métodos al final de la clase AppDetectionService
+  static Future<void> updateBlockedApps(List<String> blockedApps) async {
+    try {
+      await _channel.invokeMethod('updateBlockedApps', {
+        'blockedApps': blockedApps,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Error actualizando apps bloqueadas: ${e.message}');
+    }
+  }
+
+  static Future<void> setDeviceLocked(bool locked) async {
+    try {
+      await _channel.invokeMethod('setDeviceLocked', {
+        'locked': locked,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Error actualizando bloqueo: ${e.message}');
+    }
+  }
+
+  static Future<bool> hasAccessibilityPermission() async {
+    try {
+      return await _channel.invokeMethod('hasAccessibilityPermission') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod('openAccessibilitySettings');
+    } on PlatformException catch (e) {
+      throw Exception('Error: ${e.message}');
+    }
+  }
+
 }
 
-// Modelos
 class InstalledApp {
   final String name;
   final String packageName;
@@ -63,13 +95,11 @@ class InstalledApp {
     required this.category,
   });
 
-  factory InstalledApp.fromMap(Map<String, dynamic> map) {
-    return InstalledApp(
-      name: map['name'] ?? '',
-      packageName: map['packageName'] ?? '',
-      category: map['category'] ?? 'Otros',
-    );
-  }
+  factory InstalledApp.fromMap(Map<String, dynamic> map) => InstalledApp(
+        name: map['name'] ?? '',
+        packageName: map['packageName'] ?? '',
+        category: map['category'] ?? 'Otros',
+      );
 
   Map<String, dynamic> toMap() => {
         'name': name,
@@ -90,13 +120,11 @@ class AppUsageStat {
     required this.minutesUsed,
   });
 
-  factory AppUsageStat.fromMap(Map<String, dynamic> map) {
-    return AppUsageStat(
-      packageName: map['packageName'] ?? '',
-      name: map['name'] ?? '',
-      minutesUsed: (map['minutesUsed'] ?? 0).toInt(),
-    );
-  }
+  factory AppUsageStat.fromMap(Map<String, dynamic> map) => AppUsageStat(
+        packageName: map['packageName'] ?? '',
+        name: map['name'] ?? '',
+        minutesUsed: (map['minutesUsed'] ?? 0).toInt(),
+      );
 }
 
 class PermissionException implements Exception {

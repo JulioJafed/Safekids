@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -89,7 +90,10 @@ class AuthRepository {
     // Enviar correo de verificación
     await user.sendEmailVerification();
 
-    return AuthResult.success(role: role);
+    // Subir apps pendientes si las hay
+      await _uploadPendingApps(user.uid);
+
+      return AuthResult.success(role: role);
   } on FirebaseAuthException catch (e) {
     return AuthResult.error(_handleAuthError(e.code));
   } catch (e) {
@@ -168,6 +172,40 @@ class AuthRepository {
     }
   }
 
+// SUBIR APPS PENDIENTES después del login
+  Future<void> _uploadPendingApps(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final appsJson = prefs.getStringList('pending_apps_sync');
+      if (appsJson == null || appsJson.isEmpty) return;
+
+      final apps = appsJson.map((entry) {
+        final parts = entry.split('|');
+        if (parts.length < 3) return null;
+        return {
+          'packageName': parts[0],
+          'name': parts[1],
+          'category': parts[2],
+          'isBlocked': false,
+        };
+      }).whereType<Map<String, dynamic>>().toList();
+
+      if (apps.isEmpty) return;
+
+      await _firestore.collection('installedApps').doc(uid).set({
+        'childId': uid,
+        'apps': apps,
+        'lastSync': FieldValue.serverTimestamp(),
+        'totalApps': apps.length,
+      });
+
+      // Limpiar datos locales
+      await prefs.remove('pending_apps_sync');
+      await prefs.remove('pending_apps_count');
+    } catch (e) {
+      print('⚠️ Error subiendo apps: $e');
+    }
+  }
   // CERRAR SESIÓN
   Future<void> signOut() async {
     await _auth.signOut();

@@ -1,6 +1,7 @@
 package com.safekids.safekids
 
 import android.app.AppOpsManager
+import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -23,40 +24,54 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
 
-                    // Obtener apps instaladas
+                    "updateBlockedApps" -> {
+                        val apps = call.argument<List<String>>("blockedApps") ?: emptyList()
+                        AppBlockerService.blockedApps = apps.toSet()
+                        result.success(true)
+                    }
+
+                    "setDeviceLocked" -> {
+                        val locked = call.argument<Boolean>("locked") ?: false
+                        AppBlockerService.isDeviceLocked = locked
+                        result.success(true)
+                    }
+
+                    "hasAccessibilityPermission" -> {
+                        result.success(isAccessibilityServiceEnabled())
+                    }
+
+                    "openAccessibilitySettings" -> {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        result.success(true)
+                    }
+
                     "getInstalledApps" -> {
                         try {
-                            val apps = getInstalledApps()
-                            result.success(apps)
+                            result.success(getInstalledApps())
                         } catch (e: Exception) {
                             result.error("ERROR", e.message, null)
                         }
                     }
 
-                    // Obtener uso de apps (últimas 24h)
                     "getAppUsageStats" -> {
+                        if (!hasUsageStatsPermission()) {
+                            result.error("NO_PERMISSION", "Sin permiso", null)
+                            return@setMethodCallHandler
+                        }
                         try {
-                            if (!hasUsageStatsPermission()) {
-                                result.error("NO_PERMISSION", "No tiene permiso de uso", null)
-                                return@setMethodCallHandler
-                            }
-                            val stats = getAppUsageStats()
-                            result.success(stats)
+                            result.success(getAppUsageStats())
                         } catch (e: Exception) {
                             result.error("ERROR", e.message, null)
                         }
                     }
 
-                    // Verificar permiso de uso
                     "hasUsagePermission" -> {
                         result.success(hasUsageStatsPermission())
                     }
 
-                    // Abrir configuración de permisos
                     "openUsageSettings" -> {
                         try {
-                            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                            startActivity(intent)
+                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("ERROR", e.message, null)
@@ -67,83 +82,92 @@ class MainActivity : FlutterActivity() {
                 }
             }
     }
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val service = "${packageName}/${AppBlockerService::class.java.canonicalName}"
+        val enabledServices = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.contains(service)
+    }
 
-    // Obtener lista de apps instaladas (no sistema)
     private fun getInstalledApps(): List<Map<String, Any>> {
         val pm = packageManager
-        val apps = mutableListOf<Map<String, Any>>()
+        val result = mutableListOf<Map<String, Any>>()
 
         val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
+            pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0L))
         } else {
             @Suppress("DEPRECATION")
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            pm.getInstalledApplications(0)
         }
 
-        for (appInfo in packages) {
-            // Filtrar apps del sistema
-            if (appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) continue
-            // Filtrar nuestra propia app
-            if (appInfo.packageName == packageName) continue
+        for (app in packages) {
+            // Solo apps del usuario, no sistema
+            if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
+            if ((app.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) continue
+            if (app.packageName == packageName) continue
 
             try {
-                val appName = pm.getApplicationLabel(appInfo).toString()
-                val packageName = appInfo.packageName
+                val name = pm.getApplicationLabel(app).toString()
+                if (name.isBlank()) continue
 
-                apps.add(mapOf(
-                    "name" to appName,
-                    "packageName" to packageName,
-                    "category" to getAppCategory(appInfo),
+                result.add(mapOf(
+                    "name" to name,
+                    "packageName" to app.packageName,
+                    "category" to getCategoryName(app),
                 ))
             } catch (e: Exception) {
-                // Ignorar apps que no se pueden leer
+                continue
             }
         }
 
-        return apps.sortedBy { it["name"] as String }
+        return result.sortedBy { it["name"] as String }
     }
 
-    // Obtener estadísticas de uso últimas 24 horas
     private fun getAppUsageStats(): List<Map<String, Any>> {
-        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val pm = packageManager
+        val end = System.currentTimeMillis()
+        val start = end - 24 * 60 * 60 * 1000L
 
-        val endTime = System.currentTimeMillis()
-        val startTime = endTime - 24 * 60 * 60 * 1000 // últimas 24h
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY, startTime, endTime
-        )
+        val stats: List<UsageStats> = usm.queryUsageStats(
+            UsageStatsManager.INTERVAL_DAILY, start, end
+        ) ?: emptyList()
 
         val result = mutableListOf<Map<String, Any>>()
 
         for (stat in stats) {
             if (stat.totalTimeInForeground <= 0) continue
+            if (stat.packageName == packageName) continue
 
             try {
-                val appInfo = pm.getApplicationInfo(stat.packageName, 0)
-                // Solo apps no sistema
-                if (appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) continue
-                if (stat.packageName == packageName) continue
+                val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getApplicationInfo(stat.packageName, PackageManager.ApplicationInfoFlags.of(0L))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getApplicationInfo(stat.packageName, 0)
+                }
 
-                val appName = pm.getApplicationLabel(appInfo).toString()
-                val minutesUsed = stat.totalTimeInForeground / 60000
+                if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
+
+                val name = pm.getApplicationLabel(appInfo).toString()
+                val minutes = stat.totalTimeInForeground / 60000L
 
                 result.add(mapOf(
                     "packageName" to stat.packageName,
-                    "name" to appName,
-                    "minutesUsed" to minutesUsed,
+                    "name" to name,
+                    "minutesUsed" to minutes,
                 ))
             } catch (e: PackageManager.NameNotFoundException) {
-                // App desinstalada, ignorar
+                continue
             }
         }
 
         return result.sortedByDescending { it["minutesUsed"] as Long }
     }
 
-    // Categoría de la app
-    private fun getAppCategory(appInfo: ApplicationInfo): String {
+    private fun getCategoryName(appInfo: ApplicationInfo): String {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             return when (appInfo.category) {
                 ApplicationInfo.CATEGORY_GAME -> "Juegos"
@@ -158,7 +182,6 @@ class MainActivity : FlutterActivity() {
         return "Otros"
     }
 
-    // Verificar si tiene permiso de uso
     private fun hasUsageStatsPermission(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

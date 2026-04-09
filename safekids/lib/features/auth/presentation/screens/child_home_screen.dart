@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../child_profile/presentation/providers/child_provider.dart';
 import '../../../child_profile/presentation/providers/link_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../child_profile/presentation/screens/device_locked_screen.dart';
 
 class ChildHomeScreen extends ConsumerStatefulWidget {
   const ChildHomeScreen({super.key});
@@ -154,7 +155,7 @@ class _ChildHomeScreenState extends ConsumerState<ChildHomeScreen>
 
             // Si el cel está bloqueado totalmente
             if (isLocked) {
-              return _buildLockedScreen();
+              return const DeviceLockedScreen();
             }
 
             return SingleChildScrollView(
@@ -381,48 +382,7 @@ class _ChildHomeScreenState extends ConsumerState<ChildHomeScreen>
     );
   }
 
-  Widget _buildLockedScreen() {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFF2D3A6B),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFF6B6B).withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.lock_rounded,
-                color: Color(0xFFFF6B6B), size: 56),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Dispositivo bloqueado',
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 48),
-            child: Text(
-              'Tu padre/madre ha bloqueado este dispositivo. Contactalo para desbloquearlo.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white60,
-                  height: 1.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  
 
   Widget _buildLinkCard() {
     return Container(

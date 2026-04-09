@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../../../../core/services/block_enforcement_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -43,11 +44,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted) return;
 
     if (result.isSuccess) {
-      if (result.role == 'parent') {
-        context.go('/dashboard/parent');
-      } else {
-        context.go('/dashboard/child');
-      }
+        if (result.role == 'parent') {
+          context.go('/dashboard/parent');
+        } else {
+          // Iniciar el servicio de bloqueo para el hijo
+          BlockEnforcementService().startListening();
+          context.go('/dashboard/child');
+        }
     } else if (result.needsVerification) {
       _showVerificationDialog();
     } else {

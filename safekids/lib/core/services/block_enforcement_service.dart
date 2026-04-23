@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app_detection_service.dart';
 
 class BlockEnforcementService {
@@ -11,7 +12,7 @@ class BlockEnforcementService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    // Escuchar cambios en apps bloqueadas
+    // En el listener de appRules agregá después de updateBlockedApps:
     _firestore
         .collection('appRules')
         .doc(uid)
@@ -21,12 +22,13 @@ class BlockEnforcementService {
       final blocked = List<String>.from(snap.data()?['blockedApps'] ?? []);
       try {
         await AppDetectionService.updateBlockedApps(blocked);
-      } catch (e) {
-        // Error silencioso
-      }
+        // Guardar localmente para modo offline
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('blocked_apps_local', blocked);
+      } catch (e) {}
     });
 
-    // Escuchar estado de bloqueo del dispositivo
+    // En el listener de childProfiles agregá:
     _firestore
         .collection('childProfiles')
         .doc(uid)
@@ -36,9 +38,11 @@ class BlockEnforcementService {
       final isLocked = snap.data()?['isDeviceLocked'] ?? false;
       try {
         await AppDetectionService.setDeviceLocked(isLocked);
-      } catch (e) {
-        // Error silencioso
-      }
+        // Guardar localmente
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('device_locked_local', isLocked);
+      } catch (e) {}
     });
   }
+
 }

@@ -1,8 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safekids/core/services/app_detection_service.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/services/block_enforcement_service.dart';
+
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +20,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   String _errorMessage = '';
+
+  
 
   @override
   void dispose() {
@@ -47,6 +52,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (result.role == 'parent') {
           context.go('/dashboard/parent');
         } else {
+           // Iniciar servicio nativo de escucha
+          AppDetectionService.startFirestoreService();
+          // Guardar UID para el servicio nativo
+          await AppDetectionService.saveChildUid(
+            FirebaseAuth.instance.currentUser!.uid
+          );
           // Iniciar el servicio de bloqueo para el hijo
           BlockEnforcementService().startListening();
           context.go('/dashboard/child');

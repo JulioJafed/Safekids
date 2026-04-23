@@ -36,6 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Control parental inteligente',
       description: 'Los padres pueden monitorear el uso del celular, bloquear apps y establecer límites de tiempo desde su propio dispositivo.',
     ),
+
     _OnboardingPage(
       icon: Icons.privacy_tip_rounded,
       color: const Color(0xFFFFB347),
@@ -57,6 +58,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       description: 'Necesitamos que actives el permiso de acceso al uso para poder ver qué apps usás y cuánto tiempo. Sin este permiso la app no puede funcionar.',
       isPermission: true,
     ),
+       
+        _OnboardingPage(
+        icon: Icons.admin_panel_settings_rounded,
+        color: const Color(0xFF2D3A6B),
+        title: 'Protección del dispositivo',
+        description:
+            'Para evitar que SafeKids sea desinstalado o desactivado sin autorización del padre/madre, necesitamos permisos de administrador.',
+        isAdmin: true,
+      ),
 
     _OnboardingPage(
       icon: Icons.accessibility_new_rounded,
@@ -73,6 +83,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     _checkPermission();
     _checkAccessibility();
+    _checkAdmin();
   }
 
   bool _hasAccessibilityPermission = false;
@@ -151,15 +162,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
     }
   }
+    bool _hasAdminPermission = false;
+
+    Future<void> _checkAdmin() async {
+      final has = await AppDetectionService.isDeviceAdminActive();
+      if (mounted) setState(() => _hasAdminPermission = has);
+    }
+
+    Future<void> _activateAdmin() async {
+      await AppDetectionService.activateDeviceAdmin();
+      await Future.delayed(const Duration(seconds: 2));
+      await _checkAdmin();
+    }
+
+
 
   bool get _canProceed {
     final page = _pages[_currentPage];
     if (page.isTerms && !_acceptedTerms) return false;
     if (page.isPermission && !_hasUsagePermission) return false;
     if (page.isAccessibility && !_hasAccessibilityPermission) return false;
+    if (page.isAdmin && !_hasAdminPermission) return false;
     
     return true;
   }
+
+  
+  
 
   bool get _isLastPage => _currentPage == _pages.length - 1;
 
@@ -306,10 +335,106 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           
           // Accesibilidad
           if (page.isAccessibility) _buildAccessibilityWidget(),
+
+          if (page.isAdmin) _buildAdminWidget(),
         ],
       ),
     );
   }
+
+  Widget _buildAdminWidget() {
+  return AnimatedContainer(
+    duration: const Duration(milliseconds: 300),
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: _hasAdminPermission
+          ? const Color(0xFF6ECFB5).withOpacity(0.1)
+          : Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: _hasAdminPermission
+            ? const Color(0xFF6ECFB5)
+            : const Color(0xFFE8ECF8),
+        width: _hasAdminPermission ? 1.5 : 1,
+      ),
+    ),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _hasAdminPermission
+                    ? const Color(0xFF6ECFB5).withOpacity(0.2)
+                    : const Color(0xFFF0F4FF),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                _hasAdminPermission
+                    ? Icons.check_circle_rounded
+                    : Icons.admin_panel_settings_rounded,
+                color: _hasAdminPermission
+                    ? const Color(0xFF6ECFB5)
+                    : const Color(0xFF2D3A6B),
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _hasAdminPermission
+                        ? '¡Protección activada!'
+                        : 'Administrador del dispositivo',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _hasAdminPermission
+                          ? const Color(0xFF3A9E87)
+                          : const Color(0xFF2D3A6B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _hasAdminPermission
+                        ? 'SafeKids está protegido'
+                        : 'Evita que el hijo desinstale la app',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8A94B2)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!_hasAdminPermission) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _activateAdmin,
+              icon: const Icon(Icons.security_rounded, size: 18),
+              label: const Text('Activar protección'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D3A6B),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
 
 Widget _buildAccessibilityWidget() {
   return AnimatedContainer(
@@ -728,6 +853,7 @@ class _OnboardingPage {
   final bool isTerms;
   final bool isPermission;
   final bool isAccessibility;
+  final bool isAdmin;
 
 
   _OnboardingPage({
@@ -738,7 +864,9 @@ class _OnboardingPage {
     this.isTerms = false,
     this.isPermission = false,
     this.isAccessibility = false,
+    this.isAdmin = false,
   });
+  
 }
 
 class _Step extends StatelessWidget {

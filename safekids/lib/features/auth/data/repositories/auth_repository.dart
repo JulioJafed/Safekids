@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:safekids/core/services/persistent_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthRepository {
@@ -147,6 +148,13 @@ class AuthRepository {
       } catch (updateError) {
         print('⚠️ Error actualizando emailVerified: $updateError');
       }
+
+      // Guardar sesión localmente
+      await PersistentService.instance.saveSession(
+        uid: user.uid,
+        role: role,
+        email: user.email ?? '',
+      );
 
       return AuthResult.success(role: role);
     } on FirebaseAuthException catch (e) {

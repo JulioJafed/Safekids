@@ -6,6 +6,12 @@ plugins {
     id("com.google.gms.google-services")  // ← solo agregá esta línea
 
 }
+dependencies {
+    // ... las que ya tenés ...
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
+}
 
 android {
     namespace = "com.safekids.safekids"

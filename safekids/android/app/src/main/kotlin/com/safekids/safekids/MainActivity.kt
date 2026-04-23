@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -16,79 +18,158 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "com.safekids/apps"
+    private var timeHandler: Handler? = null
+    private var timeRunnable: Runnable? = null
+    private var flutterChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
+        flutterChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, CHANNEL
+        )
 
-                    "updateBlockedApps" -> {
-                        val apps = call.argument<List<String>>("blockedApps") ?: emptyList()
-                        AppBlockerService.blockedApps = apps.toSet()
-                        result.success(true)
-                    }
+        flutterChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
 
-                    "setDeviceLocked" -> {
-                        val locked = call.argument<Boolean>("locked") ?: false
-                        AppBlockerService.isDeviceLocked = locked
-                        result.success(true)
-                    }
-
-                    "hasAccessibilityPermission" -> {
-                        result.success(isAccessibilityServiceEnabled())
-                    }
-
-                    "openAccessibilitySettings" -> {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        result.success(true)
-                    }
-
-                    "getInstalledApps" -> {
-                        try {
-                            result.success(getInstalledApps())
-                        } catch (e: Exception) {
-                            result.error("ERROR", e.message, null)
-                        }
-                    }
-
-                    "getAppUsageStats" -> {
-                        if (!hasUsageStatsPermission()) {
-                            result.error("NO_PERMISSION", "Sin permiso", null)
-                            return@setMethodCallHandler
-                        }
-                        try {
-                            result.success(getAppUsageStats())
-                        } catch (e: Exception) {
-                            result.error("ERROR", e.message, null)
-                        }
-                    }
-
-                    "hasUsagePermission" -> {
-                        result.success(hasUsageStatsPermission())
-                    }
-
-                    "openUsageSettings" -> {
-                        try {
-                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("ERROR", e.message, null)
-                        }
-                    }
-
-                    else -> result.notImplemented()
+                "startFirestoreService" -> {
+                    val intent = Intent(this, FirestoreListenerService::class.java)
+                    startService(intent)
+                    result.success(true)
                 }
+
+                "saveChildUid" -> {
+                    val uid = call.argument<String>("uid") ?: ""
+                    val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("child_uid", uid).apply()
+                    // Iniciar el servicio inmediatamente
+                    val intent = Intent(this, FirestoreListenerService::class.java)
+                    startService(intent)
+                    result.success(true)
+                }
+
+                "activateDeviceAdmin" -> {
+                    activateDeviceAdmin()
+                    result.success(true)
+                }
+
+                "isDeviceAdminActive" -> {
+                    result.success(isDeviceAdminActive())
+                }
+
+                "checkPendingAlerts" -> {
+                    val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+                    val hasAlert = prefs.getBoolean("pending_disable_alert", false)
+                    if (hasAlert) {
+                        prefs.edit().putBoolean("pending_disable_alert", false).apply()
+                    }
+                    result.success(hasAlert)
+                }
+
+                "getInstalledApps" -> {
+                    try {
+                        result.success(getInstalledApps())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+
+                "getAppUsageStats" -> {
+                    if (!hasUsageStatsPermission()) {
+                        result.error("NO_PERMISSION", "Sin permiso", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        result.success(getAppUsageStats())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+
+                "hasUsagePermission" -> {
+                    result.success(hasUsageStatsPermission())
+                }
+
+                "openUsageSettings" -> {
+                    try {
+                        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+
+                "updateBlockedApps" -> {
+                    val apps = call.argument<List<String>>("blockedApps") ?: emptyList()
+                    AppBlockerService.blockedApps = apps.toSet()
+                    result.success(true)
+                }
+
+                "setDeviceLocked" -> {
+                    val locked = call.argument<Boolean>("locked") ?: false
+                    AppBlockerService.isDeviceLocked = locked
+                    result.success(true)
+                }
+
+                "hasAccessibilityPermission" -> {
+                    result.success(isAccessibilityServiceEnabled())
+                }
+
+                "openAccessibilitySettings" -> {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    result.success(true)
+                }
+
+                "startTimeTracking" -> {
+                    startTimeTracking()
+                    result.success(true)
+                }
+
+                "stopTimeTracking" -> {
+                    stopTimeTracking()
+                    result.success(true)
+                }
+
+                else -> result.notImplemented()
             }
+        }
     }
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = "${packageName}/${AppBlockerService::class.java.canonicalName}"
-        val enabledServices = android.provider.Settings.Secure.getString(
-            contentResolver,
-            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return enabledServices.contains(service)
+
+        private fun activateDeviceAdmin() {
+            val component = android.content.ComponentName(this, SafeKidsAdminReceiver::class.java)
+            val intent = Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+            intent.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, component)
+            intent.putExtra(
+                android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "SafeKids necesita permisos de administrador para proteger el dispositivo"
+            )
+            startActivity(intent)
+        }
+
+        private fun isDeviceAdminActive(): Boolean {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val component = android.content.ComponentName(this, SafeKidsAdminReceiver::class.java)
+            return dpm.isAdminActive(component)
+        }
+
+
+    private fun startTimeTracking() {
+        if (timeHandler != null) return
+        timeHandler = Handler(Looper.getMainLooper())
+        val runnable = object : Runnable {
+            override fun run() {
+                flutterChannel?.invokeMethod("onMinutePassed", null)
+                timeHandler?.postDelayed(this, 60000L)
+            }
+        }
+        timeRunnable = runnable
+        timeHandler?.postDelayed(runnable, 60000L)
+    }
+
+    private fun stopTimeTracking() {
+        timeRunnable?.let { timeHandler?.removeCallbacks(it) }
+        timeHandler = null
+        timeRunnable = null
     }
 
     private fun getInstalledApps(): List<Map<String, Any>> {
@@ -103,7 +184,6 @@ class MainActivity : FlutterActivity() {
         }
 
         for (app in packages) {
-            // Solo apps del usuario, no sistema
             if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
             if ((app.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) continue
             if (app.packageName == packageName) continue
@@ -111,7 +191,6 @@ class MainActivity : FlutterActivity() {
             try {
                 val name = pm.getApplicationLabel(app).toString()
                 if (name.isBlank()) continue
-
                 result.add(mapOf(
                     "name" to name,
                     "packageName" to app.packageName,
@@ -143,7 +222,10 @@ class MainActivity : FlutterActivity() {
 
             try {
                 val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getApplicationInfo(stat.packageName, PackageManager.ApplicationInfoFlags.of(0L))
+                    pm.getApplicationInfo(
+                        stat.packageName,
+                        PackageManager.ApplicationInfoFlags.of(0L)
+                    )
                 } else {
                     @Suppress("DEPRECATION")
                     pm.getApplicationInfo(stat.packageName, 0)
@@ -199,5 +281,14 @@ class MainActivity : FlutterActivity() {
             )
         }
         return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val service = "${packageName}/${AppBlockerService::class.java.canonicalName}"
+        val enabledServices = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.contains(service)
     }
 }

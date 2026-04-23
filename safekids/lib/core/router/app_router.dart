@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safekids/core/services/persistent_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
@@ -8,6 +10,7 @@ import '../../features/dashboard/presentation/screens/parent_dashboard_screen.da
 import '../../features/auth/presentation/screens/child_home_screen.dart';
 import '../../features/child_profile/presentation/screens/link_device_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
+
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -61,17 +64,33 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkOnboarding() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    final prefs = await SharedPreferences.getInstance();
-    final completed = prefs.getBool('onboarding_completed') ?? false;
-    if (!mounted) return;
-    if (completed) {
-      context.go('/login');
-    } else {
-      context.go('/onboarding');
-    }
+  await Future.delayed(const Duration(milliseconds: 800));
+  if (!mounted) return;
+
+  final prefs = await SharedPreferences.getInstance();
+  final onboardingDone = prefs.getBool('onboarding_completed') ?? false;
+
+  if (!onboardingDone) {
+    context.go('/onboarding');
+    return;
   }
+
+  // Verificar si hay sesión activa de Firebase
+  final user = FirebaseAuth.instance.currentUser;
+  if (user != null) {
+    // Sesión activa — ir directo al dashboard
+    final role = await PersistentService.instance.getSavedRole();
+    if (role == 'parent') {
+      context.go('/dashboard/parent');
+    } else if (role == 'child') {
+      context.go('/dashboard/child');
+    } else {
+      context.go('/login');
+    }
+  } else {
+    context.go('/login');
+  }
+}
 
   @override
   Widget build(BuildContext context) {

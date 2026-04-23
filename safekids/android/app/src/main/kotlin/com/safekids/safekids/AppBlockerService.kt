@@ -13,51 +13,143 @@ class AppBlockerService : AccessibilityService() {
         var blockedApps: Set<String> = emptySet()
         var isDeviceLocked: Boolean = false
         var instance: AppBlockerService? = null
+
+        val systemPackages = setOf(
+            "com.android.systemui",
+            "com.android.launcher",
+            "com.android.launcher2",
+            "com.android.launcher3",
+            "com.google.android.apps.nexuslauncher",
+            "com.miui.home",
+            "com.huawei.android.launcher",
+            "com.samsung.android.app.launcher",
+            "com.oppo.launcher",
+            "com.vivo.launcher",
+            "com.safekids.safekids",
+            "android",
+        )
     }
+
+    private var lastBlockedPackage = ""
+        private var lastBlockTime = 0L
+        private var currentForegroundPackage = ""
+
+       private val lockChecker = object : Runnable {
+        override fun run() {
+        if (isDeviceLocked) {
+            if (currentForegroundPackage.isNotEmpty() &&
+                !systemPackages.any { currentForegroundPackage.contains(it) } &&
+                currentForegroundPackage != "com.safekids.safekids" &&
+                currentForegroundPackage != "com.safekids.safekids.LockScreenActivity") {
+                // Lanzar pantalla de bloqueo
+                try {
+                    val lockIntent = Intent(applicationContext, LockScreenActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    }
+                    applicationContext.startActivity(lockIntent)
+                } catch (e: Exception) {
+                    goToLauncher()
+                }
+            }
+        }
+        handler.postDelayed(this, 500)
+    }
+}
 
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        val info = AccessibilityServiceInfo()
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-        info.flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-        info.notificationTimeout = 100
+
+        val info = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            notificationTimeout = 50
+        }
         serviceInfo = info
+        // Iniciar verificador periódico
+        handler.postDelayed(lockChecker, 500)
+
+        // Iniciar Firestore listener automáticamente
+        try {
+            val intent = Intent(this, FirestoreListenerService::class.java)
+            startService(intent)
+            android.util.Log.d("SafeKids", "FirestoreListenerService iniciado desde AccessibilityService")
+        } catch (e: Exception) {
+            android.util.Log.e("SafeKids", "Error iniciando servicio: ${e.message}")
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (event == null) return
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val packageName = event.packageName?.toString() ?: return
+        currentForegroundPackage = packageName
 
-        // Ignorar el lanzador y la propia app
-        if (packageName == "com.safekids.safekids") return
-        if (packageName.contains("launcher")) return
-        if (packageName == "com.android.systemui") return
+        if (systemPackages.any { packageName.contains(it) }) return
 
-        // Si el dispositivo está completamente bloqueado
         if (isDeviceLocked) {
-            goToHome()
+            if (packageName != "com.safekids.safekids" &&
+                packageName != "com.safekids.safekids.LockScreenActivity") {
+                try {
+                    val lockIntent = Intent(applicationContext, LockScreenActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    }
+                    applicationContext.startActivity(lockIntent)
+                } catch (e: Exception) {
+                    goToLauncher()
+                }
+            }
             return
         }
 
-        // Si la app está bloqueada
         if (blockedApps.contains(packageName)) {
+            val now = System.currentTimeMillis()
+            if (packageName == lastBlockedPackage && now - lastBlockTime < 1000) return
+            lastBlockedPackage = packageName
+            lastBlockTime = now
             goToHome()
         }
     }
 
     private fun goToHome() {
-        handler.post {
-            val intent = Intent(Intent.ACTION_MAIN)
-            intent.addCategory(Intent.CATEGORY_HOME)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    handler.post {
+        try {
+            val intent = Intent(this, LockScreenActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
             startActivity(intent)
+        } catch (e: Exception) {
+            // Si falla mostrar la Activity, ir al inicio
+            goToLauncher()
         }
     }
+}
+
+    private fun goToLauncher() {
+        handler.post {
+            try {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                android.util.Log.e("SafeKids", "Error: ${e.message}")
+            }
+        }
+}
 
     override fun onInterrupt() {
         instance = null
@@ -65,6 +157,7 @@ class AppBlockerService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(lockChecker)
         instance = null
     }
 }

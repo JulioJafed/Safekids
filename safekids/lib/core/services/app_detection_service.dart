@@ -82,6 +82,48 @@ class AppDetectionService {
     }
   }
 
+
+  static Future<bool> checkPendingAlert() async {
+    try {
+      return await _channel.invokeMethod('checkPendingAlerts') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<void> activateDeviceAdmin() async {
+    try {
+      await _channel.invokeMethod('activateDeviceAdmin');
+    } on PlatformException catch (e) {
+      throw Exception('Error: ${e.message}');
+    }
+  }
+
+  static Future<bool> isDeviceAdminActive() async {
+    try {
+      return await _channel.invokeMethod('isDeviceAdminActive') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<void> startFirestoreService() async {
+  try {
+    await _channel.invokeMethod('startFirestoreService');
+  } on PlatformException {
+    // Error silencioso
+  }
+  }
+
+  static Future<void> saveChildUid(String uid) async {
+  try {
+    await _channel.invokeMethod('saveChildUid', {'uid': uid});
+  } on PlatformException catch (e) {
+    throw Exception('Error: ${e.message}');
+  }
+  }
+
+
 }
 
 class InstalledApp {

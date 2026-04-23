@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../child_profile/presentation/providers/child_provider.dart';
 import '../../../child_profile/presentation/providers/link_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../child_profile/presentation/screens/device_locked_screen.dart';
+import '../../../../core/services/time_tracking_service.dart';
 
 class ChildHomeScreen extends ConsumerStatefulWidget {
   const ChildHomeScreen({super.key});
@@ -21,27 +21,34 @@ class _ChildHomeScreenState extends ConsumerState<ChildHomeScreen>
   bool _obscurePassword = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
 
-    // Marcar como online al entrar
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(childRepositoryProvider).updateOnlineStatus(true);
-    });
-  }
+    @override
+    void initState() {
+      super.initState();
+      _pulseController = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 2),
+      )..repeat(reverse: true);
+      _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      );
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(childRepositoryProvider).updateOnlineStatus(true);
+        // Verificar reset diario y empezar tracking
+        TimeTrackingService.instance.checkDailyReset().then((_) {
+          TimeTrackingService.instance.startTracking();
+        });
+      });
+    }
+
+  
+  
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    // Marcar como offline al salir
+     _pulseController.dispose();
+    TimeTrackingService.instance.stopTracking();
     ref.read(childRepositoryProvider).updateOnlineStatus(false);
     super.dispose();
   }
@@ -155,7 +162,7 @@ class _ChildHomeScreenState extends ConsumerState<ChildHomeScreen>
 
             // Si el cel está bloqueado totalmente
             if (isLocked) {
-              return const DeviceLockedScreen();
+               return const SizedBox(); // pantalla vacía, el nativo maneja el bloqueo
             }
 
             return SingleChildScrollView(

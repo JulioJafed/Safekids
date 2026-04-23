@@ -3,6 +3,7 @@ import 'link_device_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/link_provider.dart';
 import '../../../../core/services/lock_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 // Modelo simple de perfil de hijo (sin base de datos por ahora)
@@ -226,15 +227,20 @@ class _ProfileCard extends StatelessWidget {
           // Acciones
           Column(
             children: [
-            IconButton(
-              icon: const Icon(Icons.link_rounded,
-                  color: Color(0xFF7B9FFF), size: 22),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LinkDeviceScreen()),
-              ),
+
+          IconButton(
+            icon: Icon(
+              profile.deviceStatus == 'blocked'
+                  ? Icons.lock_rounded
+                  : Icons.lock_open_rounded,
+              color: profile.deviceStatus == 'blocked'
+                  ? const Color(0xFFFF6B6B)
+                  : const Color(0xFF7B9FFF),
+              size: 22,
             ),
-              
+            onPressed: () => _showLockDialog(context),
+          ),
+
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded,
                     color: Color(0xFFFF6B6B), size: 22),
@@ -249,170 +255,203 @@ class _ProfileCard extends StatelessWidget {
  
   void _showLockDialog(BuildContext context) {
   final lockService = LockService();
-  bool isLocked = profile.deviceStatus == 'blocked';
+  bool isLocked = false;
+  bool isLoading = true;
   String generatedCode = '';
-  bool isLoading = false;
 
   showDialog(
     context: context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setModalState) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: isLocked
-                    ? const Color(0xFFFF6B6B).withOpacity(0.12)
-                    : const Color(0xFF6ECFB5).withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-                color: isLocked
-                    ? const Color(0xFFFF6B6B)
-                    : const Color(0xFF6ECFB5),
-                size: 40,
-              ),
-            ),
+      builder: (context, setModalState) {
+        // Cargar estado real desde Firestore al abrir
+        if (isLoading) {
+          FirebaseFirestore.instance
+              .collection('childProfiles')
+              .doc(profile.id)
+              .get()
+              .then((doc) {
+            if (doc.exists) {
+              final locked = doc.data()?['isDeviceLocked'] ?? false;
+              final code = doc.data()?['unlockCode'] ?? '';
+              setModalState(() {
+                isLocked = locked;
+                generatedCode = code;
+                isLoading = false;
+              });
+            } else {
+              setModalState(() => isLoading = false);
+            }
+          });
+        }
 
-            const SizedBox(height: 16),
-
-            Text(
-              isLocked
-                  ? 'Celular de ${profile.name} BLOQUEADO'
-                  : '¿Bloquear celular de ${profile.name}?',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D3A6B),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              isLocked
-                  ? 'Mostrá este código a ${profile.name} para desbloquearlo'
-                  : 'Se generará un código que solo vos podés ver para desbloquearlo',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 13, color: Color(0xFF8A94B2), height: 1.5),
-            ),
-
-            // Mostrar código generado
-            if (generatedCode.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2D3A6B).withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: const Color(0xFF7B9FFF).withOpacity(0.3)),
-                ),
-                child: Column(
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
+          contentPadding: const EdgeInsets.all(24),
+          content: isLoading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                        color: Color(0xFF7B9FFF)),
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Código de desbloqueo',
-                        style: TextStyle(
-                            fontSize: 12, color: Color(0xFF8A94B2))),
-                    const SizedBox(height: 8),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: isLocked
+                            ? const Color(0xFFFF6B6B).withOpacity(0.12)
+                            : const Color(0xFF6ECFB5).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isLocked
+                            ? Icons.lock_rounded
+                            : Icons.lock_open_rounded,
+                        color: isLocked
+                            ? const Color(0xFFFF6B6B)
+                            : const Color(0xFF6ECFB5),
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     Text(
-                      generatedCode,
+                      isLocked
+                          ? 'Celular de ${profile.name} BLOQUEADO'
+                          : '¿Bloquear celular de ${profile.name}?',
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 42,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                         color: Color(0xFF2D3A6B),
-                        letterSpacing: 8,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Dictale este código al hijo para desbloquear',
+                    Text(
+                      isLocked
+                          ? 'Mostrá este código a ${profile.name} para desbloquear'
+                          : 'Se generará un código único para desbloquear',
                       textAlign: TextAlign.center,
-                      style:
-                          TextStyle(fontSize: 11, color: Color(0xFF8A94B2)),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF8A94B2),
+                          height: 1.5),
+                    ),
+
+                    // Código de desbloqueo
+                    if (isLocked && generatedCode.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2D3A6B).withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                              color: const Color(0xFF7B9FFF).withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('Código de desbloqueo',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF8A94B2))),
+                            const SizedBox(height: 8),
+                            Text(
+                              generatedCode,
+                              style: const TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2D3A6B),
+                                letterSpacing: 8,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Dictale este código al hijo',
+                              style: TextStyle(
+                                  fontSize: 11, color: Color(0xFF8A94B2)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                  color: Color(0xFFE8ECF8)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: const Text('Cerrar',
+                                style: TextStyle(
+                                    color: Color(0xFF8A94B2))),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              setModalState(() => isLoading = true);
+                              if (!isLocked) {
+                                final result =
+                                    await lockService.lockDevice(profile.id);
+                                if (result.isSuccess) {
+                                  setModalState(() {
+                                    isLocked = true;
+                                    generatedCode = result.code;
+                                    isLoading = false;
+                                  });
+                                } else {
+                                  setModalState(() => isLoading = false);
+                                }
+                              } else {
+                                await lockService.unlockDevice(profile.id);
+                                if (context.mounted) Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isLocked
+                                  ? const Color(0xFF6ECFB5)
+                                  : const Color(0xFFFF6B6B),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: Text(
+                              isLocked ? 'Desbloquear' : 'Bloquear ahora',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            if (isLoading)
-              const CircularProgressIndicator(color: Color(0xFF7B9FFF))
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFE8ECF8)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: const Text('Cerrar',
-                          style: TextStyle(color: Color(0xFF8A94B2))),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        setModalState(() => isLoading = true);
-
-                        if (!isLocked) {
-                          // Bloquear y generar código
-                          final result =
-                              await lockService.lockDevice(profile.id);
-                          if (result.isSuccess) {
-                            setModalState(() {
-                              isLocked = true;
-                              generatedCode = result.code;
-                              isLoading = false;
-                            });
-                          } else {
-                            setModalState(() => isLoading = false);
-                          }
-                        } else {
-                          // Desbloquear directamente
-                          await lockService.unlockDevice(profile.id);
-                          if (context.mounted) Navigator.pop(context);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isLocked
-                            ? const Color(0xFF6ECFB5)
-                            : const Color(0xFFFF6B6B),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: Text(
-                        isLocked ? 'Desbloquear' : 'Bloquear ahora',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
+        );
+      },
     ),
   );
 }
+
 }
 
 class _EmptyState extends StatelessWidget {

@@ -125,9 +125,25 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
 
-                "stopTimeTracking" -> {
+                                "stopTimeTracking" -> {
                     stopTimeTracking()
                     result.success(true)
+                }
+
+                "setUninstallAuthorized" -> {
+                    // El código del padre fue verificado correctamente en Flutter.
+                    // Guardamos una ventana de tiempo corta (ej. 5 min) durante la
+                    // cual SafeKidsAdminReceiver permitirá la desactivación sin
+                    // volver a bloquear el dispositivo.
+                    val ttlMinutes = call.argument<Int>("ttlMinutes") ?: 5
+                    val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+                    val until = System.currentTimeMillis() + (ttlMinutes * 60_000L)
+                    prefs.edit().putLong("uninstall_authorized_until", until).apply()
+                    result.success(true)
+                }
+
+                "hasNetworkConnection" -> {
+                    result.success(hasNetworkConnection())
                 }
 
                 else -> result.notImplemented()
@@ -283,7 +299,15 @@ class MainActivity : FlutterActivity() {
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
+        private fun hasNetworkConnection(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+        private fun isAccessibilityServiceEnabled(): Boolean {
         val service = "${packageName}/${AppBlockerService::class.java.canonicalName}"
         val enabledServices = android.provider.Settings.Secure.getString(
             contentResolver,
@@ -291,4 +315,6 @@ class MainActivity : FlutterActivity() {
         ) ?: return false
         return enabledServices.contains(service)
     }
+
 }
+

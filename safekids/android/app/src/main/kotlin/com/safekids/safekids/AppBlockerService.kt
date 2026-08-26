@@ -31,32 +31,54 @@ class AppBlockerService : AccessibilityService() {
     }
 
     private var lastBlockedPackage = ""
-        private var lastBlockTime = 0L
-        private var currentForegroundPackage = ""
+    private var lastBlockTime = 0L
+    private var currentForegroundPackage = ""
 
-       private val lockChecker = object : Runnable {
+    // Obtiene el paquete del teclado activo para no confundirlo con
+    // "otra app" cuando el hijo escribe el código (esto sí arregla el parpadeo)
+    private fun getCurrentInputMethodPackage(): String? {
+        return try {
+            val ime = android.provider.Settings.Secure.getString(
+                contentResolver,
+                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
+            )
+            ime?.substringBefore("/")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isIgnorablePackage(packageName: String): Boolean {
+        if (systemPackages.any { packageName.contains(it) }) return true
+        val ime = getCurrentInputMethodPackage()
+        if (ime != null && packageName == ime) return true
+        if (packageName.contains("inputmethod") || packageName.contains("keyboard")) return true
+        return false
+    }
+
+    // Red de seguridad: revisa cada 500ms sin depender de eventos de
+    // accesibilidad, por si el hijo logró salir por algún medio (gestos,
+    // recientes, etc.) que no dispare un evento capturable.
+    private val lockChecker = object : Runnable {
         override fun run() {
-        if (isDeviceLocked) {
-            if (currentForegroundPackage.isNotEmpty() &&
-                !systemPackages.any { currentForegroundPackage.contains(it) } &&
-                currentForegroundPackage != "com.safekids.safekids" &&
-                currentForegroundPackage != "com.safekids.safekids.LockScreenActivity") {
-                // Lanzar pantalla de bloqueo
-                try {
-                    val lockIntent = Intent(applicationContext, LockScreenActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            if (isDeviceLocked) {
+                if (currentForegroundPackage.isNotEmpty() &&
+                    !isIgnorablePackage(currentForegroundPackage)) {
+                    try {
+                        val lockIntent = Intent(applicationContext, LockScreenActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        }
+                        applicationContext.startActivity(lockIntent)
+                    } catch (e: Exception) {
+                        goToLauncher()
                     }
-                    applicationContext.startActivity(lockIntent)
-                } catch (e: Exception) {
-                    goToLauncher()
                 }
             }
+            handler.postDelayed(this, 500)
         }
-        handler.postDelayed(this, 500)
     }
-}
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -73,10 +95,8 @@ class AppBlockerService : AccessibilityService() {
             notificationTimeout = 50
         }
         serviceInfo = info
-        // Iniciar verificador periódico
         handler.postDelayed(lockChecker, 500)
 
-        // Iniciar Firestore listener automáticamente
         try {
             val intent = Intent(this, FirestoreListenerService::class.java)
             startService(intent)
@@ -91,13 +111,14 @@ class AppBlockerService : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val packageName = event.packageName?.toString() ?: return
+
+        // Ignorar el teclado: no lo tratamos como "cambio de app"
+        if (isIgnorablePackage(packageName)) return
+
         currentForegroundPackage = packageName
 
-        if (systemPackages.any { packageName.contains(it) }) return
-
         if (isDeviceLocked) {
-            if (packageName != "com.safekids.safekids" &&
-                packageName != "com.safekids.safekids.LockScreenActivity") {
+            if (packageName != "com.safekids.safekids") {
                 try {
                     val lockIntent = Intent(applicationContext, LockScreenActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -122,20 +143,19 @@ class AppBlockerService : AccessibilityService() {
     }
 
     private fun goToHome() {
-    handler.post {
-        try {
-            val intent = Intent(this, LockScreenActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+        handler.post {
+            try {
+                val intent = Intent(this, LockScreenActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                goToLauncher()
             }
-            startActivity(intent)
-        } catch (e: Exception) {
-            // Si falla mostrar la Activity, ir al inicio
-            goToLauncher()
         }
     }
-}
 
     private fun goToLauncher() {
         handler.post {
@@ -149,7 +169,7 @@ class AppBlockerService : AccessibilityService() {
                 android.util.Log.e("SafeKids", "Error: ${e.message}")
             }
         }
-}
+    }
 
     override fun onInterrupt() {
         instance = null

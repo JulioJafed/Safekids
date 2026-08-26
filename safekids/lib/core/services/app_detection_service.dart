@@ -115,12 +115,33 @@ class AppDetectionService {
   }
   }
 
-  static Future<void> saveChildUid(String uid) async {
+    static Future<void> saveChildUid(String uid) async {
   try {
     await _channel.invokeMethod('saveChildUid', {'uid': uid});
   } on PlatformException catch (e) {
     throw Exception('Error: ${e.message}');
   }
+  }
+
+  // Marca que el padre autorizó la desactivación de Device Admin por
+  // [ttlMinutes] minutos. Debe llamarse justo después de verificar el
+  // código con UninstallProtectionService.verifyCode().
+  static Future<void> setUninstallAuthorized({int ttlMinutes = 5}) async {
+    try {
+      await _channel.invokeMethod('setUninstallAuthorized', {
+        'ttlMinutes': ttlMinutes,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Error: ${e.message}');
+    }
+  }
+
+  static Future<bool> hasNetworkConnection() async {
+    try {
+      return await _channel.invokeMethod('hasNetworkConnection') ?? false;
+    } on PlatformException {
+      return false;
+    }
   }
 
 

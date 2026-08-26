@@ -4,6 +4,7 @@ import '../../../child_profile/presentation/screens/profiles_screen.dart';
 import '../../../screen_time/presentation/screens/screen_time_screen.dart';
 import '../../../app_control/presentation/screens/app_control_screen.dart';
 import '../../../reports/presentation/screens/reports_screen.dart';
+import '../../../child_profile/presentation/widgets/uninstall_alert_listener.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -82,9 +83,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       drawer: _ParentDrawer(
         onClose: () => _scaffoldKey.currentState?.closeDrawer(),
       ),
-
+      
       // ── BODY ─────────────────────────────────────────
-      body: _screens[_currentIndex],
+      body: UninstallAlertListener(child: _screens[_currentIndex]),
 
       // ── BOTTOM NAV ───────────────────────────────────
       bottomNavigationBar: Container(

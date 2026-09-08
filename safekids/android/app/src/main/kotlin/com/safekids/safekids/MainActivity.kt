@@ -108,6 +108,7 @@ class MainActivity : FlutterActivity() {
                 "setDeviceLocked" -> {
                     val locked = call.argument<Boolean>("locked") ?: false
                     AppBlockerService.isDeviceLocked = locked
+                    AppBlockerService.persistLockState(this, locked)
                     result.success(true)
                 }
 
@@ -141,9 +142,30 @@ class MainActivity : FlutterActivity() {
                     prefs.edit().putLong("uninstall_authorized_until", until).apply()
                     result.success(true)
                 }
-
                 "hasNetworkConnection" -> {
                     result.success(hasNetworkConnection())
+                }
+
+                "hasOverlayPermission" -> {
+                    val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        android.provider.Settings.canDrawOverlays(this)
+                    } else {
+                        true
+                    }
+                    result.success(hasPermission)
+                }
+
+                "openOverlaySettings" -> {
+                    try {
+                        val intent = Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
                 }
 
                 else -> result.notImplemented()

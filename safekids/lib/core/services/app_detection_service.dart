@@ -136,11 +136,29 @@ class AppDetectionService {
     }
   }
 
-  static Future<bool> hasNetworkConnection() async {
+    static Future<bool> hasNetworkConnection() async {
     try {
       return await _channel.invokeMethod('hasNetworkConnection') ?? false;
     } on PlatformException {
       return false;
+    }
+  }
+
+  // Permiso "Mostrar sobre otras apps" — necesario para que la pantalla
+  // de bloqueo (overlay) se pueda dibujar encima de cualquier app.
+  static Future<bool> hasOverlayPermission() async {
+    try {
+      return await _channel.invokeMethod('hasOverlayPermission') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<void> openOverlaySettings() async {
+    try {
+      await _channel.invokeMethod('openOverlaySettings');
+    } on PlatformException catch (e) {
+      throw Exception('Error: ${e.message}');
     }
   }
 

@@ -13,6 +13,8 @@ class ChildProfile {
   final int age;
   final String emoji;
   final String deviceStatus;
+  final bool isDeviceLocked;
+  final DateTime? lastActivityAt;
   final Color color;
 
   const ChildProfile({
@@ -21,6 +23,8 @@ class ChildProfile {
     required this.age,
     required this.emoji,
     required this.deviceStatus,
+    required this.isDeviceLocked,
+    required this.lastActivityAt,
     required this.color,
   });
 }
@@ -95,6 +99,7 @@ Widget build(BuildContext context) {
                         const Color(0xFFFFB085),
                         const Color(0xFFFF8FAB),
                       ];
+                      final lastActivityTs = child['lastActivityAt'] as Timestamp?;
                       return _ProfileCard(
                         profile: ChildProfile(
                           id: child['childId'] ?? '',
@@ -102,6 +107,8 @@ Widget build(BuildContext context) {
                           age: child['age'] ?? 0,
                           emoji: child['emoji'] ?? '👧',
                           deviceStatus: child['deviceStatus'] ?? 'offline',
+                          isDeviceLocked: child['isDeviceLocked'] ?? false,
+                          lastActivityAt: lastActivityTs?.toDate(),
                           color: colors[index % colors.length],
                         ),
                         onDelete: () async {
@@ -130,7 +137,12 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isConnected = profile.deviceStatus == 'Conectado';
+    // "En línea" solo si NO está bloqueado Y hubo actividad real
+    // detectada en los últimos 2 minutos (viene del AccessibilityService).
+    final isConnected = !profile.isDeviceLocked &&
+        profile.lastActivityAt != null &&
+        DateTime.now().difference(profile.lastActivityAt!) < const Duration(minutes: 2);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
@@ -208,7 +220,7 @@ class _ProfileCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        profile.deviceStatus,
+                        isConnected ? 'En línea' : 'Fuera de línea',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -230,15 +242,21 @@ class _ProfileCard extends StatelessWidget {
 
           IconButton(
             icon: Icon(
-              profile.deviceStatus == 'blocked'
+              profile.isDeviceLocked
                   ? Icons.lock_rounded
                   : Icons.lock_open_rounded,
-              color: profile.deviceStatus == 'blocked'
-                  ? const Color(0xFFFF6B6B)
-                  : const Color(0xFF7B9FFF),
+              color: profile.isDeviceLocked
+                  ? const Color(0xFFFF3B3B) // rojo = bloqueado
+                  : const Color(0xFF4CAF50), // verde = desbloqueado
               size: 22,
             ),
             onPressed: () => _showLockDialog(context),
+          ),
+
+          IconButton(
+            icon: const Icon(Icons.password_rounded,
+                color: Color(0xFFFFB347), size: 22),
+            onPressed: () => _showEmergencyPinDialog(context),
           ),
 
               IconButton(
@@ -450,8 +468,180 @@ class _ProfileCard extends StatelessWidget {
       },
     ),
   );
-}
+  }
 
+  void _showEmergencyPinDialog(BuildContext context) {
+    final pinController = TextEditingController();
+    bool isLoading = true;
+    bool isSaving = false;
+    String currentPin = '';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (isLoading) {
+            FirebaseFirestore.instance
+                .collection('childProfiles')
+                .doc(profile.id)
+                .get()
+                .then((doc) {
+              final pin = doc.data()?['emergencyPin'] ?? '';
+              pinController.text = pin;
+              setModalState(() {
+                currentPin = pin;
+                isLoading = false;
+              });
+            });
+          }
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            contentPadding: const EdgeInsets.all(24),
+            content: isLoading
+                ? const SizedBox(
+                    height: 100,
+                    child: Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFF7B9FFF)),
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFB347).withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.password_rounded,
+                            color: Color(0xFFFFB347), size: 32),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'PIN de emergencia de ${profile.name}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2D3A6B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Funciona incluso sin internet (modo avión, sin señal). '
+                        'Guardalo en un lugar seguro: es la única forma de '
+                        'desbloquear el celular si se queda sin conexión.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF8A94B2),
+                            height: 1.5),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: pinController,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 6),
+                        decoration: InputDecoration(
+                          counterText: '',
+                          hintText: '••••',
+                          filled: true,
+                          fillColor: const Color(0xFFF5F7FF),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                    color: Color(0xFFE8ECF8)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text('Cerrar',
+                                  style: TextStyle(color: Color(0xFF8A94B2))),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: isSaving
+                                  ? null
+                                  : () async {
+                                      final newPin = pinController.text.trim();
+                                      if (newPin.length < 4) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                          content: Text(
+                                              'El PIN debe tener al menos 4 dígitos'),
+                                        ));
+                                        return;
+                                      }
+                                      setModalState(() => isSaving = true);
+                                      await FirebaseFirestore.instance
+                                          .collection('childProfiles')
+                                          .doc(profile.id)
+                                          .set({'emergencyPin': newPin},
+                                              SetOptions(merge: true));
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                          content: Text(
+                                              '✓ PIN de emergencia guardado'),
+                                          backgroundColor: Color(0xFF4CAF50),
+                                        ));
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFFB347),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: isSaving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2),
+                                    )
+                                  : const Text('Guardar',
+                                      style:
+                                          TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _EmptyState extends StatelessWidget {

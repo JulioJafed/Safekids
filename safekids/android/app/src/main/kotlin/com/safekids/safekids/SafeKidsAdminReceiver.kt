@@ -77,6 +77,7 @@ class SafeKidsAdminReceiver : DeviceAdminReceiver() {
             // (AppBlockerService + LockScreenActivity), que NO depende de
             // Device Admin para funcionar.
             AppBlockerService.isDeviceLocked = true
+            AppBlockerService.persistLockState(context, true)
 
             if (uid != null) {
                 try {

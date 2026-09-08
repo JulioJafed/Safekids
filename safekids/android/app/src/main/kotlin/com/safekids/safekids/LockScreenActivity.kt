@@ -10,8 +10,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
@@ -51,7 +49,20 @@ class LockScreenActivity : Activity() {
         )
 
         listenForRemoteUnlock()
+        buildUi()
+        tryStartLockTask()
 
+        // Ya estamos visibles → cancelar la notificación de respaldo
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.cancel(9001)
+        } catch (e: Exception) {
+            // Sin problema si falla
+        }
+    
+    }
+
+    private fun buildUi() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -136,9 +147,9 @@ class LockScreenActivity : Activity() {
             val code = codeInput.text.toString().trim()
             if (code.isEmpty()) {
                 Toast.makeText(this, "Ingresá el código", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+            } else {
+                verifyCode(code)
             }
-            verifyCode(code)
         }
 
         layout.addView(lockIcon)
@@ -149,19 +160,13 @@ class LockScreenActivity : Activity() {
         layout.addView(helpText)
 
         setContentView(layout)
-
-        tryStartLockTask()
     }
 
     override fun onResume() {
         super.onResume()
-        // Reforzar el fijado cada vez que la actividad vuelve al frente
-        // (por si el sistema la despinó por algún motivo externo)
         tryStartLockTask()
     }
 
-    // ── Fijar pantalla (Screen Pinning): impide que gestos, botón de
-    // inicio o recientes saquen al hijo de esta pantalla ──
     private fun tryStartLockTask() {
         try {
             val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -194,99 +199,146 @@ class LockScreenActivity : Activity() {
                 val isLocked = snap.getBoolean("isDeviceLocked") ?: true
                 if (!isLocked) {
                     AppBlockerService.isDeviceLocked = false
+                    AppBlockerService.persistLockState(this, false)
                     tryStopLockTask()
                     finish()
                 }
             }
     }
 
-    private fun verifyCode(code: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
+    private fun hasRealNetworkConnection(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            false
+        }
+    }
 
+    private fun verifyCode(code: String) {
+        if (!hasRealNetworkConnection()) {
+            tryOfflineUnlock(code)
+            return
+        }
+
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
-            Toast.makeText(this, "Sin conexión. Verificá tu internet.", Toast.LENGTH_SHORT).show()
+            tryOfflineUnlock(code)
             return
         }
 
         val firestore = FirebaseFirestore.getInstance()
 
         firestore.collection("childProfiles").document(uid).get()
-            .addOnSuccessListener { profileDoc ->
-                val lockedReason = profileDoc.getString("lockedReason") ?: ""
+            .addOnSuccessListener { profileDoc -> handleProfileDoc(profileDoc, uid, code, firestore) }
+            .addOnFailureListener { tryOfflineUnlock(code) }
+    }
 
-                if (lockedReason == "uninstall_denied" || lockedReason == "uninstall_unauthorized") {
-                    firestore.collection("uninstallRequests").document(uid).get()
-                        .addOnSuccessListener { reqDoc ->
-                            val storedCode = reqDoc.getString("authCode") ?: ""
-                            val status = reqDoc.getString("status") ?: ""
-                            val expiresAt = reqDoc.getTimestamp("codeExpiresAt")
+    private fun handleProfileDoc(
+        profileDoc: com.google.firebase.firestore.DocumentSnapshot,
+        uid: String,
+        code: String,
+        firestore: FirebaseFirestore
+    ) {
+        val lockedReason = profileDoc.getString("lockedReason") ?: ""
 
-                            val isExpired = expiresAt != null &&
-                                    expiresAt.toDate().before(java.util.Date())
-
-                            if (status != "code_issued" || storedCode.isEmpty()) {
-                                Toast.makeText(
-                                    this,
-                                    "Tu padre/madre todavía no autorizó esta acción.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                return@addOnSuccessListener
-                            }
-
-                            if (isExpired) {
-                                Toast.makeText(
-                                    this,
-                                    "El código expiró. Pedile uno nuevo a tu padre/madre.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                return@addOnSuccessListener
-                            }
-
-                            if (storedCode != code) {
-                                Toast.makeText(this, "❌ Código incorrecto.", Toast.LENGTH_SHORT).show()
-                                return@addOnSuccessListener
-                            }
-
-                            firestore.collection("childProfiles").document(uid).update(
-                                mapOf(
-                                    "isDeviceLocked" to false,
-                                    "lockedReason" to null,
-                                    "unlockedAt" to com.google.firebase.Timestamp.now()
-                                )
-                            )
-                            firestore.collection("uninstallRequests").document(uid).update(
-                                mapOf("status" to "authorized", "authCode" to "")
-                            )
-                            AppBlockerService.isDeviceLocked = false
-                            tryStopLockTask()
-                            finish()
-                        }
-                        .addOnFailureListener {
-                            Toast.makeText(this, "Sin conexión. No se puede verificar.", Toast.LENGTH_LONG).show()
-                        }
-                } else {
-                    val storedCode = profileDoc.getString("unlockCode") ?: ""
-                    if (storedCode == code && storedCode.isNotEmpty()) {
-                        firestore.collection("childProfiles").document(uid).update(
-                            mapOf(
-                                "isDeviceLocked" to false,
-                                "unlockCode" to "",
-                                "lockedReason" to null,
-                                "unlockedAt" to com.google.firebase.Timestamp.now()
-                            )
-                        ).addOnSuccessListener {
-                            AppBlockerService.isDeviceLocked = false
-                            tryStopLockTask()
-                            finish()
-                        }
-                    } else {
-                        Toast.makeText(this, "❌ Código incorrecto. Intentá de nuevo.", Toast.LENGTH_SHORT).show()
-                    }
+        if (lockedReason == "uninstall_denied" || lockedReason == "uninstall_unauthorized") {
+            firestore.collection("uninstallRequests").document(uid).get()
+                .addOnSuccessListener { reqDoc -> handleUninstallRequest(reqDoc, uid, code, firestore) }
+                .addOnFailureListener { tryOfflineUnlock(code) }
+        } else {
+            val storedCode = profileDoc.getString("unlockCode") ?: ""
+            if (storedCode == code && storedCode.isNotEmpty()) {
+                firestore.collection("childProfiles").document(uid).update(
+                    mapOf(
+                        "isDeviceLocked" to false,
+                        "unlockCode" to "",
+                        "lockedReason" to null,
+                        "unlockedAt" to com.google.firebase.Timestamp.now()
+                    )
+                ).addOnSuccessListener {
+                    AppBlockerService.isDeviceLocked = false
+                    AppBlockerService.persistLockState(this, false)
+                    tryStopLockTask()
+                    finish()
                 }
+            } else {
+                Toast.makeText(this, "❌ Código incorrecto. Intentá de nuevo.", Toast.LENGTH_SHORT).show()
             }
-            .addOnFailureListener {
-                Toast.makeText(this, "Sin conexión. No se puede verificar el código.", Toast.LENGTH_LONG).show()
-            }
+        }
+    }
+
+    private fun handleUninstallRequest(
+        reqDoc: com.google.firebase.firestore.DocumentSnapshot,
+        uid: String,
+        code: String,
+        firestore: FirebaseFirestore
+    ) {
+        val storedCode = reqDoc.getString("authCode") ?: ""
+        val status = reqDoc.getString("status") ?: ""
+        val expiresAt = reqDoc.getTimestamp("codeExpiresAt")
+        val isExpired = expiresAt != null && expiresAt.toDate().before(java.util.Date())
+
+        if (status != "code_issued" || storedCode.isEmpty()) {
+            Toast.makeText(this, "Tu padre/madre todavía no autorizó esta acción.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (isExpired) {
+            Toast.makeText(this, "El código expiró. Pedile uno nuevo a tu padre/madre.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (storedCode != code) {
+            Toast.makeText(this, "❌ Código incorrecto.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        firestore.collection("childProfiles").document(uid).update(
+            mapOf(
+                "isDeviceLocked" to false,
+                "lockedReason" to null,
+                "unlockedAt" to com.google.firebase.Timestamp.now()
+            )
+        )
+        firestore.collection("uninstallRequests").document(uid).update(
+            mapOf("status" to "authorized", "authCode" to "")
+        )
+        AppBlockerService.isDeviceLocked = false
+        AppBlockerService.persistLockState(this, false)
+        tryStopLockTask()
+        finish()
+    }
+
+    // ── PIN DE EMERGENCIA: funciona sin internet, comparando contra el
+    // último valor que se cacheó localmente mientras SÍ había conexión.
+    private fun tryOfflineUnlock(code: String) {
+        val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+        val cachedPin = prefs.getString("cached_emergency_pin", null)
+
+        if (cachedPin.isNullOrEmpty()) {
+            Toast.makeText(
+                this,
+                "Sin conexión y no hay PIN de emergencia configurado. Reconectá a internet para continuar.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        if (code != cachedPin) {
+            Toast.makeText(this, "❌ PIN incorrecto.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        prefs.edit().putBoolean("pending_unlock_sync", true).apply()
+        AppBlockerService.isDeviceLocked = false
+        AppBlockerService.persistLockState(this, false)
+        tryStopLockTask()
+        Toast.makeText(this, "✓ Desbloqueado con PIN de emergencia", Toast.LENGTH_SHORT).show()
+        finish()
     }
 
     @Deprecated("Deprecated in Java")
@@ -307,13 +359,13 @@ class LockScreenActivity : Activity() {
     override fun onPause() {
         super.onPause()
         if (AppBlockerService.isDeviceLocked) {
-            val intent = intent
-            intent.addFlags(
+            val relaunch = intent
+            relaunch.addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TASK or
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
             )
-            startActivity(intent)
+            startActivity(relaunch)
         }
     }
 

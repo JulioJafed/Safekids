@@ -14,10 +14,12 @@ class FirestoreListenerService : Service() {
     private var appsListener: ListenerRegistration? = null
     private var lockListener: ListenerRegistration? = null
     private var isListening = false
+    private val syncHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
         startListening()
+        startPendingSyncChecker()
     }
 
     private fun getChildUid(): String? {
@@ -70,7 +72,17 @@ class FirestoreListenerService : Service() {
 
                 val isLocked = snap.getBoolean("isDeviceLocked") ?: false
                 AppBlockerService.isDeviceLocked = isLocked
+                AppBlockerService.persistLockState(applicationContext, isLocked)
                 android.util.Log.d("SafeKids", "✅ Dispositivo bloqueado: $isLocked")
+
+                // PIN de emergencia: se cachea localmente cada vez que
+                // llega una actualización, para que esté disponible
+                // incluso si luego se pierde la conexión.
+                val emergencyPin = snap.getString("emergencyPin")
+                if (!emergencyPin.isNullOrEmpty()) {
+                    val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("cached_emergency_pin", emergencyPin).apply()
+                }
 
                 // Si se activó el bloqueo → lanzar pantalla inmediatamente
                 if (isLocked) {
@@ -90,6 +102,47 @@ class FirestoreListenerService : Service() {
         }
     }
 
+    // ── Revisa cada 15s si hay un desbloqueo offline pendiente de
+    // sincronizar (se desbloqueó con el PIN de emergencia sin internet) y,
+    // apenas detecta conexión, lo sube a Firestore para que el panel del
+    // padre quede al día.
+    private fun startPendingSyncChecker() {
+        val checker = object : Runnable {
+            override fun run() {
+                trySyncPendingUnlock()
+                syncHandler.postDelayed(this, 15000)
+            }
+        }
+        syncHandler.postDelayed(checker, 15000)
+    }
+
+    private fun trySyncPendingUnlock() {
+        val prefs = getSharedPreferences("safekids_prefs", Context.MODE_PRIVATE)
+        val pending = prefs.getBoolean("pending_unlock_sync", false)
+        if (!pending) return
+
+        val uid = getChildUid() ?: return
+
+        FirebaseFirestore.getInstance()
+            .collection("childProfiles")
+            .document(uid)
+            .update(
+                mapOf(
+                    "isDeviceLocked" to false,
+                    "lockedReason" to null,
+                    "unlockedAt" to com.google.firebase.Timestamp.now(),
+                    "unlockedVia" to "emergencyPin"
+                )
+            )
+            .addOnSuccessListener {
+                prefs.edit().putBoolean("pending_unlock_sync", false).apply()
+                android.util.Log.d("SafeKids", "✅ Desbloqueo offline sincronizado")
+            }
+            .addOnFailureListener {
+                // Todavía sin conexión, se reintentará en el próximo ciclo
+            }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!isListening) startListening()
         return START_STICKY
@@ -102,6 +155,7 @@ class FirestoreListenerService : Service() {
         appsListener?.remove()
         lockListener?.remove()
         isListening = false
+        syncHandler.removeCallbacksAndMessages(null)
         // Auto-reiniciarse
         val intent = Intent(this, FirestoreListenerService::class.java)
         startService(intent)

@@ -13,11 +13,13 @@ class AuthRepository {
   User? get currentUser => _auth.currentUser;
 
   // REGISTRO
-  Future<AuthResult> register({
+    Future<AuthResult> register({
   required String name,
   required String email,
   required String password,
   required String role,
+  String? gender, // 'boy' o 'girl' — solo aplica si role == 'child'
+  DateTime? birthDate, // solo aplica si role == 'child'
 }) async {
   try {
     final credential = await _auth.createUserWithEmailAndPassword(
@@ -55,16 +57,21 @@ class AuthRepository {
     }
 
     // Si es hijo → crear documento base en childProfiles
-    if (role == 'child') {
+        if (role == 'child') {
+      final calculatedAge = birthDate != null ? _calculateAge(birthDate) : 0;
+
       await _firestore.collection('childProfiles').doc(user.uid).set({
         'childId': user.uid,
         'name': name,
         'email': email,
         'parentId': null,
-        'emoji': '👧',
-        'age': 0,
+        'gender': gender ?? 'girl',
+        'emoji': gender == 'boy' ? '👦' : '👧',
+        'birthDate': birthDate != null ? Timestamp.fromDate(birthDate) : null,
+        'age': calculatedAge,
         'deviceStatus': 'offline',
         'isDeviceLocked': false,
+        'lastActivityAt': null,
         'lastSeen': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -102,6 +109,18 @@ class AuthRepository {
     return AuthResult.error('Error inesperado: $e');
   }
 }
+
+    // Calcula la edad exacta a partir de la fecha de nacimiento
+  int _calculateAge(DateTime birthDate) {
+    final now = DateTime.now();
+    int age = now.year - birthDate.year;
+    if (now.month < birthDate.month ||
+        (now.month == birthDate.month && now.day < birthDate.day)) {
+      age--;
+    }
+    return age < 0 ? 0 : age;
+  }
+
 
   // LOGIN
   Future<AuthResult> login({
@@ -242,6 +261,7 @@ class AuthRepository {
         return 'Error al iniciar sesión. Intentá de nuevo.';
     }
   }
+
 }
 
 // Modelo de resultado

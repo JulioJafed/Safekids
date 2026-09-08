@@ -19,12 +19,62 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String _errorMessage = '';
   String? _selectedRole; // 'parent' o 'child'
 
+  // Nuevos campos, solo para rol 'child'
+  String? _selectedGender; // 'boy' o 'girl'
+  DateTime? _selectedBirthDate;
+
+  int? get _calculatedAge {
+    if (_selectedBirthDate == null) return null;
+    final now = DateTime.now();
+    int age = now.year - _selectedBirthDate!.year;
+    if (now.month < _selectedBirthDate!.month ||
+        (now.month == _selectedBirthDate!.month &&
+            now.day < _selectedBirthDate!.day)) {
+      age--;
+    }
+    return age < 0 ? 0 : age;
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 8, now.month, now.day),
+      firstDate: DateTime(now.year - 18),
+      lastDate: now,
+      locale: const Locale('es'),
+      helpText: 'Fecha de nacimiento',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF7B9FFF),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF2D3A6B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedBirthDate = picked);
+    }
+  }
+
   Future<void> _register() async {
     if (_nameController.text.trim().isEmpty ||
         _emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty ||
         _selectedRole == null) {
       setState(() => _errorMessage = 'Completá todos los campos y seleccioná un rol.');
+      return;
+    }
+
+    if (_selectedRole == 'child' &&
+        (_selectedGender == null || _selectedBirthDate == null)) {
+      setState(() => _errorMessage =
+          'Seleccioná el avatar y la fecha de nacimiento del hijo/a.');
       return;
     }
 
@@ -38,6 +88,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
           role: _selectedRole!,
+          gender: _selectedRole == 'child' ? _selectedGender : null,
+          birthDate: _selectedRole == 'child' ? _selectedBirthDate : null,
         );
 
     setState(() => _isLoading = false);
@@ -190,6 +242,96 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               if (_selectedRole != null) ...[
                 const SizedBox(height: 14),
                 _RoleBanner(role: _selectedRole!),
+              ],
+
+              // ── AVATAR + FECHA DE NACIMIENTO (solo para hijo) ──
+              if (_selectedRole == 'child') ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Avatar',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF2D3A6B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _GenderCard(
+                        emoji: '👦',
+                        label: 'Niño',
+                        selected: _selectedGender == 'boy',
+                        onTap: () => setState(() => _selectedGender = 'boy'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _GenderCard(
+                        emoji: '👧',
+                        label: 'Niña',
+                        selected: _selectedGender == 'girl',
+                        onTap: () => setState(() => _selectedGender = 'girl'),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+                const Text(
+                  'Fecha de nacimiento',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF2D3A6B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _pickBirthDate,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F7FF),
+                      borderRadius: BorderRadius.circular(14),
+                      border: _selectedBirthDate != null
+                          ? Border.all(
+                              color: const Color(0xFF7B9FFF), width: 1.5)
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cake_outlined,
+                            color: Color(0xFF7B9FFF), size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _selectedBirthDate == null
+                                ? 'Seleccioná la fecha'
+                                : '${_selectedBirthDate!.day.toString().padLeft(2, '0')}/'
+                                  '${_selectedBirthDate!.month.toString().padLeft(2, '0')}/'
+                                  '${_selectedBirthDate!.year}'
+                                  '  •  $_calculatedAge años',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _selectedBirthDate == null
+                                  ? const Color(0xFFBFC8E2)
+                                  : const Color(0xFF2D3A6B),
+                              fontWeight: _selectedBirthDate == null
+                                  ? FontWeight.normal
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded,
+                            color: Color(0xFFB0BAD3)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
 
               if (_errorMessage.isNotEmpty) ...[
@@ -440,6 +582,55 @@ class _RoleCard extends StatelessWidget {
                 fontSize: 11,
                 color: Color(0xFF8A94B2),
                 height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GenderCard extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GenderCard({
+    required this.emoji,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF7B9FFF).withOpacity(0.12)
+              : const Color(0xFFF5F7FF),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? const Color(0xFF7B9FFF) : const Color(0xFFE8ECF8),
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 32)),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? const Color(0xFF7B9FFF) : const Color(0xFF8A94B2),
               ),
             ),
           ],

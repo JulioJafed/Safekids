@@ -76,14 +76,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'Necesitamos el servicio de accesibilidad para poder bloquear apps automáticamente cuando el padre lo indique.',
       isAccessibility: true,
     ),
-  ];
 
-  @override
+    _OnboardingPage(
+      icon: Icons.layers_rounded,
+      color: const Color(0xFFFF8FAB),
+      title: 'Mostrar sobre otras apps',
+      description:
+          'Este permiso permite que la pantalla de bloqueo se muestre encima de cualquier app, garantizando que el bloqueo no se pueda evadir.',
+      isOverlay: true,
+    ),
+  ];
+    @override
   void initState() {
     super.initState();
     _checkPermission();
     _checkAccessibility();
     _checkAdmin();
+    _checkOverlay();
   }
 
   bool _hasAccessibilityPermission = false;
@@ -162,7 +171,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
     }
   }
-    bool _hasAdminPermission = false;
+       bool _hasAdminPermission = false;
 
     Future<void> _checkAdmin() async {
       final has = await AppDetectionService.isDeviceAdminActive();
@@ -175,6 +184,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _checkAdmin();
     }
 
+    bool _hasOverlayPermission = false;
+
+    Future<void> _checkOverlay() async {
+      final has = await AppDetectionService.hasOverlayPermission();
+      if (mounted) setState(() => _hasOverlayPermission = has);
+    }
+
+    Future<void> _openOverlaySettings() async {
+      await AppDetectionService.openOverlaySettings();
+      await Future.delayed(const Duration(seconds: 2));
+      await _checkOverlay();
+    }
+
 
 
   bool get _canProceed {
@@ -183,6 +205,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (page.isPermission && !_hasUsagePermission) return false;
     if (page.isAccessibility && !_hasAccessibilityPermission) return false;
     if (page.isAdmin && !_hasAdminPermission) return false;
+    if (page.isOverlay && !_hasOverlayPermission) return false;
     
     return true;
   }
@@ -337,6 +360,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (page.isAccessibility) _buildAccessibilityWidget(),
 
           if (page.isAdmin) _buildAdminWidget(),
+
+          if (page.isOverlay) _buildOverlayWidget(),
         ],
       ),
     );
@@ -555,6 +580,124 @@ Widget _buildAccessibilityWidget() {
   );
 }
   
+
+  Widget _buildOverlayWidget() {
+  return AnimatedContainer(
+    duration: const Duration(milliseconds: 300),
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: _hasOverlayPermission
+          ? const Color(0xFF6ECFB5).withOpacity(0.1)
+          : Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: _hasOverlayPermission
+            ? const Color(0xFF6ECFB5)
+            : const Color(0xFFE8ECF8),
+        width: _hasOverlayPermission ? 1.5 : 1,
+      ),
+    ),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _hasOverlayPermission
+                    ? const Color(0xFF6ECFB5).withOpacity(0.2)
+                    : const Color(0xFFF0F4FF),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                _hasOverlayPermission
+                    ? Icons.check_circle_rounded
+                    : Icons.layers_rounded,
+                color: _hasOverlayPermission
+                    ? const Color(0xFF6ECFB5)
+                    : const Color(0xFFFF8FAB),
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _hasOverlayPermission
+                        ? '¡Permiso activado!'
+                        : 'Mostrar sobre otras apps',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _hasOverlayPermission
+                          ? const Color(0xFF3A9E87)
+                          : const Color(0xFF2D3A6B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _hasOverlayPermission
+                        ? 'La pantalla de bloqueo no se puede evadir'
+                        : 'Requerido para el bloqueo total',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8A94B2)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!_hasOverlayPermission) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _openOverlaySettings,
+              icon: const Icon(Icons.layers_rounded, size: 18),
+              label: const Text('Activar permiso'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF8FAB),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE8ECF8)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text('¿Cómo activarlo?',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2D3A6B))),
+                SizedBox(height: 8),
+                _Step(num: '1', text: 'Tocá "Activar permiso"'),
+                _Step(num: '2', text: 'Buscá "SafeKids" en la lista'),
+                _Step(num: '3', text: 'Activá "Permitir mostrar sobre otras apps"'),
+                _Step(num: '4', text: 'Volvé a la app'),
+              ],
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
 
   Widget _buildTermsWidget(_OnboardingPage page) {
     return GestureDetector(
@@ -854,6 +997,7 @@ class _OnboardingPage {
   final bool isPermission;
   final bool isAccessibility;
   final bool isAdmin;
+  final bool isOverlay;
 
 
   _OnboardingPage({
@@ -865,6 +1009,7 @@ class _OnboardingPage {
     this.isPermission = false,
     this.isAccessibility = false,
     this.isAdmin = false,
+    this.isOverlay = false,
   });
   
 }
